@@ -9,6 +9,8 @@ from . import run_gtdbtk
 from . import process_large_contigs
 from . import check_chimeras
 from . import check_read_chimeras
+from . import classify_contigs
+from . import run_mmseqs_contigs
 from . import classify_clipping
 from . import check_zero_coverage
 from . import run_anvi_misassemblies
@@ -23,6 +25,8 @@ __all__ = [
     'process_large_contigs',
     'check_chimeras',
     'check_read_chimeras',
+    'classify_contigs',
+    'run_mmseqs_contigs',
     'classify_clipping',
     'check_zero_coverage',
     'run_anvi_misassemblies',

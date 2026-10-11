@@ -18,6 +18,8 @@ from mamisa.commands import run_mimag_rna
 from mamisa.commands import process_large_contigs
 from mamisa.commands import check_chimeras
 from mamisa.commands import check_read_chimeras
+from mamisa.commands import classify_contigs
+from mamisa.commands import run_mmseqs_contigs
 from mamisa.commands import classify_clipping
 from mamisa.commands import check_zero_coverage
 from mamisa.commands import setup_workflow
@@ -47,6 +49,8 @@ Available commands:
   run-gunc                Run GUNC gene-level chimerism/contamination detection
   check-chimeras          Detect chimeric MAGs and circular contigs (GC + GUNC)
   check-read-chimeras     Detect chimeric contigs via read-level taxonomy (Kraken2+BAM)
+  classify-contigs        Per-contig taxonomy check: flag bins whose contigs span >=2 taxa
+  run-mmseqs-contigs      Run MMseqs2 taxonomy on bin contigs (input for classify-contigs)
   classify-clipping       Classify each clipping position with BAM evidence
   check-zero-coverage     Validate assembly regions with no read coverage via BLAST
   setup-workflow          Configure the Snakemake workflow (env yamls + config)
@@ -77,6 +81,8 @@ For more information, visit: https://github.com/l-gallucci/mamisa
     process_large_contigs.register_parser(subparsers)
     check_chimeras.register_parser(subparsers)
     check_read_chimeras.register_parser(subparsers)
+    classify_contigs.register_parser(subparsers)
+    run_mmseqs_contigs.register_parser(subparsers)
     classify_clipping.register_parser(subparsers)
     check_zero_coverage.register_parser(subparsers)
     setup_workflow.register_parser(subparsers)

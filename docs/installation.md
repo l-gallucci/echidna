@@ -36,6 +36,7 @@ conda env. So the layout is:
 | `gunc` | GUNC + DIAMOND + Prodigal (+ MaMISA) | `run-gunc` |
 | `mimag` | barrnap + tRNAscan-SE (+ MaMISA) | `run-mimag-rna` |
 | `anvio-9` | anvi'o (+ MaMISA) | `run-anvi-misassemblies` (produces the `*-clipping.txt` inputs) |
+| `mmseqs2` | MMseqs2 (+ MaMISA) | `run-mmseqs-contigs` (produces the per-contig taxonomy for `classify-contigs`) |
 
 Do I need all of them? Only the ones whose commands you use. Just want
 `organize-mags` / `check-chimeras`? The `mamisa` env alone is enough. Want the full
@@ -59,6 +60,8 @@ to be on `PATH` for the command that uses it.
 | `run-mimag-rna` | barrnap + tRNAscan-SE |
 | `check-read-chimeras` | samtools, Kraken2 or Kaiju |
 | `check-chimeras` | (none; `--gunc-dir` consumes GUNC output) |
+| `classify-contigs` | (none; consumes a Kraken2/Kaiju/MMseqs2 per-contig classification + nodes.dmp) |
+| `run-mmseqs-contigs` | MMseqs2 |
 | `classify-clipping` | samtools (+ BLAST+ for `--self-blast`) |
 | `check-zero-coverage` | BLAST+ (`blastn`/`makeblastdb`), optional Meryl |
 | `filter-misassemblies` | anvi'o (upstream misassembly detection) |
@@ -100,6 +103,17 @@ conda run -n mimag pip install -e .
 #    and `misassembly-wf` can drive it inside this env.
 mamba create -n anvio-9 -c conda-forge -c bioconda anvio=9
 conda run -n anvio-9 pip install -e .
+
+# 7) MMseqs2 - per-contig taxonomy for classify-contigs (optional, heavy).
+mamba create -n mmseqs2 -c conda-forge -c bioconda mmseqs2
+conda run -n mmseqs2 pip install -e .
+```
+
+For `run-mmseqs-contigs` you also need an MMseqs2 taxonomy database. A
+GTDB-derived one keeps per-contig ranks consistent with GTDB-Tk downstream:
+
+```bash
+conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb /tmp/mmseqs_tmp
 ```
 
 Check everything is compatible at any time:

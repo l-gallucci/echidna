@@ -165,13 +165,15 @@ def test_windowed_gc_alone_is_low_not_medium():
     assert any("Windowed GC" in r for r in reasons)
 
 
-def test_gunc_contig_multiclade_adds_four():
-    # contigs spanning >=2 clades is +4 -> Medium alone, High with any corroboration
+def test_gunc_contig_multiclade_is_hard_flag_high():
+    # contigs spanning >=2 clades is a hard flag -> High on its own, any rank
     risk, reasons = _risk(gunc_contig_clades=3)
-    assert risk == "Medium"
+    assert risk == "High"
     assert any("span 3 clades" in r for r in reasons)
+    assert any("hard flag" in r for r in reasons)
 
-    risk2, _ = _risk(gunc_contig_clades=2, contamination=12.0)  # +4 +3 = 7
+    # even just 2 clades with nothing else -> High
+    risk2, _ = _risk(gunc_contig_clades=2)
     assert risk2 == "High"
 
 

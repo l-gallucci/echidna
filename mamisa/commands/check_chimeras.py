@@ -277,7 +277,9 @@ def register_parser(subparsers):
 Signal interpretation (gene-level taxonomy drives; GC only corroborates)
 ---------------------
   GUNC per-contig taxonomy  (needs run-gunc --contig-taxonomy-output)
-    contigs span ≥ 2 clades  +4   strongest: direct per-contig taxonomic split
+    contigs span ≥ 2 clades  HARD FLAG -> risk forced to High at any rank
+                             (contigs of different taxonomy = contamination,
+                             not accepted; tune granularity with --gunc-tax-rank)
   GUNC gene-level (aggregate)
     pass.GUNC = False        +3
     clade_separation > 0.45  +2
@@ -291,7 +293,8 @@ Signal interpretation (gene-level taxonomy drives; GC only corroborates)
     > 15 %  +1
   GTDB-Tk warning (any, or MSA percent < 10 %)   +1
 
-  Risk = High (≥5) / Medium (≥2) / Low (≥1) / Clean (0). GC alone never reaches
+  Risk = High (≥5) / Medium (≥2) / Low (≥1) / Clean (0), except the per-contig
+  taxonomy hard flag above, which forces High on its own. GC alone never reaches
   Medium: it needs a taxonomy or contamination signal to corroborate.
 
 Examples

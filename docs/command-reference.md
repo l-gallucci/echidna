@@ -52,8 +52,10 @@ GC heterogeneity into a per-bin High/Medium/Low/Clean risk. Gene-level taxonomy
 drives the score; GC is noisy (a single short contig can set the max-min delta)
 so it only corroborates and never reaches Medium on its own. If `--gunc-dir`
 contains `*.contig_assignments.tsv` (from `run-gunc --contig-taxonomy-output`),
-bins whose contigs span two or more clades get the strongest signal (+4). The
-`reasons` column names the contigs that set each GC delta, with their lengths.
+bins whose contigs span two or more clades are a **hard flag**: risk is forced
+to High regardless of the other signals, at whatever `--gunc-tax-rank` you
+choose (contigs of different taxonomy in one bin are contamination at any rank).
+The `reasons` column names the contigs that set each GC delta, with their lengths.
 
 ```
 Required:
@@ -65,7 +67,8 @@ Optional:
   --checkm2-report PATH       CheckM2 report (adds contamination signal)
   --gunc-dir PATH             GUNC output directory (gene-level clade-consistency; plus
                               per-contig multi-clade if *.contig_assignments.tsv present)
-  --gunc-tax-rank STR         Rank for per-contig clade counting (default: phylum)
+  --gunc-tax-rank STR         Rank for per-contig clade counting / hard flag (default: phylum;
+                              order is a good finer choice, genus is noisier)
   --gunc-min-genes INT        Min genes per contig before its clade counts (default: 3)
   --gc-window INT             GC window size in bp (default: 5000)
   --gc-step INT               GC step in bp (default: 2500)
@@ -83,7 +86,7 @@ Scoring (High >=5, Medium >=2, Low >=1, Clean 0):
 
 | Signal | Score |
 |---|---|
-| GUNC per-contig taxonomy: contigs span >=2 clades | +4 |
+| GUNC per-contig taxonomy: contigs span >=2 clades | HARD FLAG -> High |
 | GUNC pass.GUNC = False (aggregate) | +3 |
 | GUNC clade_separation_score > 0.45 | +2 |
 | CheckM2 contamination > 10% / > 5% | +3 / +2 |
@@ -93,6 +96,79 @@ Scoring (High >=5, Medium >=2, Low >=1, Clean 0):
 
 Pre-dRep filter: exclude `gunc_pass == False` or `chimera_risk == High`; send
 Medium to manual review (read the `reasons` column).
+
+## classify-contigs
+
+Per-contig taxonomy check, independent of GUNC. Assigns each contig its
+classifier taxon (Kraken2 or Kaiju run on the contigs, not the reads), walks it
+up the NCBI tree to `--rank`, and per bin counts the distinct rank-level taxa.
+Two or more distinct taxa flags the bin as a taxonomic chimera. Like MAGpurify2's
+taxonomy module, the bin's **majority** rank-taxon is treated as its identity and
+the **minority (foreign) contigs are named** as the likely contaminants. Contigs
+classified only above the rank are left unresolved (they cannot prove a split).
+Report-only; orthogonal to the GUNC/GC signals in check-chimeras.
+
+Produce the input first, e.g.:
+`kraken2 --db DB --output contigs.kraken2 all_contigs.fa`
+(the sequence-id column Kraken2/Kaiju emit is the contig name).
+
+```
+Required:
+  --bins-dir PATH             Directory containing bin FASTA files
+  --nodes-dmp PATH            NCBI nodes.dmp (ships with the Kraken2/Kaiju DB)
+  one classifier (mutually exclusive):
+    --kraken2-output PATH     Kraken2 per-contig output (nucleotide, DB-biased)
+    --kaiju-output PATH       Kaiju per-contig output (protein, more sensitive)
+
+Optional:
+  -o, --output PATH           Per-contig TSV (default: contig_taxonomy.tsv);
+                              a per-bin summary is written as <output>.bins.tsv
+  --names-dmp PATH            NCBI names.dmp for human-readable taxon names
+  --rank STR                  Rank to compare contigs at (default: order; 'domain'
+                              is accepted and maps to NCBI superkingdom)
+  --extensions LIST           Genome extensions (default: fa,fasta,fna)
+  --dry-run
+```
+
+Per-contig columns: `contig`, `bin`, `contig_taxid`, `rank_taxon`, `is_foreign`.
+Per-bin columns: `bin`, `n_contigs`, `n_contigs_resolved`, `n_taxa`,
+`majority_taxon`, `chimera_flag`, `n_foreign_contigs`, `foreign_contigs`, `taxa`.
+
+Note: Kraken2/Kaiju use NCBI taxonomy, not GTDB, so the ranks will not line up
+one-to-one with GTDB-Tk downstream. For GTDB-consistent per-contig taxonomy use a
+GTDB-based classifier DB, or lean on GUNC `--contig-taxonomy-output` in
+check-chimeras. `order` is a good default rank: phylum is too coarse to separate
+related contaminants, genus/species gets noisy on short contigs.
+
+## run-mmseqs-contigs
+
+Runs MMseqs2 taxonomy on the contigs of a set of bins and writes the per-contig
+TSV that `classify-contigs --mmseqs-output` consumes. MMseqs2 is the per-contig
+classifier MAGpurify2 uses: protein-level 2bLCA, sensitive on divergent/novel
+taxa, and its DB can be GTDB-derived so ranks match GTDB-Tk. Heavy dependency, so
+it lives in its own `mmseqs2` env: `conda run -n mmseqs2 mamisa run-mmseqs-contigs ...`.
+
+Needs a prebuilt MMseqs2 taxonomy DB (`--db`), e.g.
+`conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb tmp`.
+
+```
+Required:
+  --bins-dir PATH             Directory with bin FASTA files (contigs concatenated)
+  --db PATH                   MMseqs2 taxonomy sequence DB (mmseqs databases/createtaxdb)
+  -o, --output PATH           Output per-contig taxonomy TSV
+
+Optional:
+  -T, --threads INT           Threads (default: 1)
+  --tmp-dir PATH              Working dir for MMseqs2 DBs/tmp (default: <output>.mmseqs_work)
+  --extensions LIST           Genome extensions (default: fa,fasta,fna)
+  --mmseqs-exe NAME           MMseqs2 executable (default: mmseqs)
+  --keep-tmp                  Keep the working dir (default: removed)
+  --mmseqs-args STR           Extra args passed to `mmseqs taxonomy` (quoted)
+  --dry-run                   Print the MMseqs2 commands without running
+```
+
+Runs `mmseqs createdb` -> `mmseqs taxonomy` -> `mmseqs createtsv`. Note: contig
+headers must be unique across bins (they are concatenated into one query FASTA).
 
 ## classify-clipping
 

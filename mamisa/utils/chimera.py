@@ -333,7 +333,9 @@ def assess_chimera_risk(
 
     Scoring:
       GUNC per-contig taxonomy (needs gunc --contig_taxonomy_output)
-        contigs span >= 2 clades → +4   (direct per-contig taxonomic split)
+        contigs span >= 2 clades → HARD FLAG: risk forced to High regardless of
+        the other signals. Contigs of different taxonomy in one bin are
+        contamination at any rank; this is the single strongest signal.
       GUNC gene-level taxonomic inconsistency (aggregate)
         pass.GUNC = False → +3   (genes span multiple clades)
         clade_separation_score > 0.45 → +2  (when not already failed)
@@ -399,12 +401,14 @@ def assess_chimera_risk(
         reasons.append(f"Elevated GUNC clade separation score (CSS={gunc_css:.2f})")
 
     # GUNC per-contig taxonomy: contigs resolving to >=2 clades is a direct
-    # per-contig taxonomic split, the strongest single chimera signal here.
+    # per-contig taxonomic split. Contigs of different taxonomy in one bin are
+    # contamination at any rank, so this forces High regardless of the rest.
     if gunc_contig_clades is not None and gunc_contig_clades >= 2:
-        score += 4
         reasons.append(
-            f"GUNC per-contig taxonomy: contigs span {gunc_contig_clades} clades"
+            f"GUNC per-contig taxonomy: contigs span {gunc_contig_clades} "
+            f"clades - taxonomic contamination (hard flag)"
         )
+        return 'High', reasons
 
     if score >= 5:
         return 'High', reasons
