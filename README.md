@@ -63,6 +63,8 @@ Every subcommand has `-h/--help`.
 
 - [docs/installation.md](docs/installation.md) - install, the one-env-per-tool
   model, external tools, databases, tests
+- [docs/workflows.md](docs/workflows.md) - the two branches (misassembly cleaning,
+  MAG quality), per-step input/output and file types, with data-flow diagrams
 - [docs/pipeline.md](docs/pipeline.md) - run options (standalone or Snakemake),
   complete workflow, step-by-step guide
 - [docs/hpc.md](docs/hpc.md) - running on a SLURM cluster

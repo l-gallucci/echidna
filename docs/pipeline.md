@@ -3,6 +3,10 @@
 Binning and anvi'o misassembly detection are assumed done upstream for the
 MAG-quality tail; the misassembly branch starts from an assembly plus a BAM.
 
+For the two branches at a glance - which step needs which input file, and the
+data-flow diagrams - see [workflows.md](workflows.md). The misassembly branch is
+PacBio HiFi only.
+
 ## Run options
 
 Both ways use the same conda envs (see [installation.md](installation.md)).

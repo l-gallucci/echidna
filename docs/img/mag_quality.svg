@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="906" viewBox="0 0 940 906" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+<rect width="940" height="906" fill="#ffffff"/>
+<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a8f98"/></marker></defs>
+<text x="470.0" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#1a1a1a">MaMISA - MAG quality and taxonomy (Branch B)</text>
+<circle cx="40" cy="64" r="7" fill="#1f6feb" stroke="#1f6feb"/>
+<text x="54" y="68" font-size="12" fill="#333">needs an external input file you provide</text>
+<circle cx="430" cy="64" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="444" y="68" font-size="12" fill="#333">runs only on earlier steps' output</text>
+<text x="40" y="88" font-size="11" fill="#666">chips show file type: FASTA sequences, BAM alignments, TSV tables, DB diamond .dmnd, DIR a directory</text>
+<rect x="330" y="150" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="178.0" r="7" fill="#1f6feb" stroke="#1f6feb"/>
+<text x="364" y="174.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[1] binning</text>
+<text x="364" y="191.0" font-size="11" fill="#6e7781">MetaBAT2 / etc (external)</text>
+<rect x="274" y="154.0" width="46" height="20" rx="4" fill="#2d7d46"/>
+<text x="297.0" y="168.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">FASTA</text>
+<text x="268" y="168.0" text-anchor="end" font-size="11" fill="#444">clean assembly</text>
+<line x1="322" y1="164.0" x2="328" y2="178.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="274" y="182.0" width="46" height="20" rx="4" fill="#a63d8f"/>
+<text x="297.0" y="196.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">BAM</text>
+<text x="268" y="196.0" text-anchor="end" font-size="11" fill="#444">mapping</text>
+<line x1="322" y1="192.0" x2="328" y2="178.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<line x1="632" y1="178.0" x2="638" y2="178.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="168.0" width="46" height="20" rx="4" fill="#2d7d46"/>
+<text x="663.0" y="182.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">FASTA</text>
+<text x="692" y="182.0" text-anchor="start" font-size="11" fill="#444">bins/</text>
+<line x1="480.0" y1="206" x2="480.0" y2="240" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="242" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="270.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="364" y="266.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[2] run-checkm2</text>
+<text x="364" y="283.0" font-size="11" fill="#6e7781">CheckM2</text>
+<line x1="632" y1="270.0" x2="638" y2="270.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="260.0" width="46" height="20" rx="4" fill="#1f6feb"/>
+<text x="663.0" y="274.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
+<text x="692" y="274.0" text-anchor="start" font-size="11" fill="#444">quality_report</text>
+<line x1="480.0" y1="298" x2="480.0" y2="332" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="334" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="362.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="364" y="358.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[3] organize-mags</text>
+<text x="364" y="375.0" font-size="11" fill="#6e7781">mamisa</text>
+<line x1="632" y1="362.0" x2="638" y2="362.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="352.0" width="46" height="20" rx="4" fill="#6e7781"/>
+<text x="663.0" y="366.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DIR</text>
+<text x="692" y="366.0" text-anchor="start" font-size="11" fill="#444">HQ / MQ / LQ</text>
+<line x1="480.0" y1="390" x2="480.0" y2="424" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="426" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="454.0" r="7" fill="#1f6feb" stroke="#1f6feb"/>
+<text x="364" y="450.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[4] run-gtdbtk</text>
+<text x="364" y="467.0" font-size="11" fill="#6e7781">GTDB-Tk</text>
+<rect x="274" y="444.0" width="46" height="20" rx="4" fill="#6e7781"/>
+<text x="297.0" y="458.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DIR</text>
+<text x="268" y="458.0" text-anchor="end" font-size="11" fill="#444">GTDB-Tk DB</text>
+<line x1="322" y1="454.0" x2="328" y2="454.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<line x1="632" y1="454.0" x2="638" y2="454.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="444.0" width="46" height="20" rx="4" fill="#1f6feb"/>
+<text x="663.0" y="458.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
+<text x="692" y="458.0" text-anchor="start" font-size="11" fill="#444">gtdbtk.*.summary</text>
+<line x1="480.0" y1="482" x2="480.0" y2="516" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="518" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="546.0" r="7" fill="#1f6feb" stroke="#1f6feb"/>
+<text x="364" y="542.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[5] run-gunc</text>
+<text x="364" y="559.0" font-size="11" fill="#6e7781">GUNC</text>
+<rect x="274" y="536.0" width="46" height="20" rx="4" fill="#b5651d"/>
+<text x="297.0" y="550.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DB</text>
+<text x="268" y="550.0" text-anchor="end" font-size="11" fill="#444">GUNC .dmnd</text>
+<line x1="322" y1="546.0" x2="328" y2="546.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<line x1="632" y1="546.0" x2="638" y2="546.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="536.0" width="46" height="20" rx="4" fill="#1f6feb"/>
+<text x="663.0" y="550.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
+<text x="692" y="550.0" text-anchor="start" font-size="11" fill="#444">maxCSS + contig_assignments</text>
+<line x1="480.0" y1="574" x2="480.0" y2="608" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="610" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="638.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="364" y="634.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[6] run-mimag-rna</text>
+<text x="364" y="651.0" font-size="11" fill="#6e7781">barrnap / tRNAscan-SE</text>
+<line x1="632" y1="638.0" x2="638" y2="638.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="628.0" width="46" height="20" rx="4" fill="#1f6feb"/>
+<text x="663.0" y="642.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
+<text x="692" y="642.0" text-anchor="start" font-size="11" fill="#444">mimag_rna summary</text>
+<line x1="480.0" y1="666" x2="480.0" y2="700" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="702" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="730.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="364" y="726.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[7] check-chimeras</text>
+<text x="364" y="743.0" font-size="11" fill="#6e7781">mamisa</text>
+<line x1="632" y1="730.0" x2="638" y2="730.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="720.0" width="46" height="20" rx="4" fill="#1f6feb"/>
+<text x="663.0" y="734.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
+<text x="692" y="734.0" text-anchor="start" font-size="11" fill="#444">chimera_report</text>
+<line x1="480.0" y1="758" x2="480.0" y2="792" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="330" y="794" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
+<circle cx="348" cy="822.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
+<text x="364" y="818.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[8] organize-mags (final)</text>
+<text x="364" y="835.0" font-size="11" fill="#6e7781">mamisa</text>
+<line x1="632" y1="822.0" x2="638" y2="822.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
+<rect x="640" y="812.0" width="46" height="20" rx="4" fill="#6e7781"/>
+<text x="663.0" y="826.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DIR</text>
+<text x="692" y="826.0" text-anchor="start" font-size="11" fill="#444">final MAGs</text>
+</svg>
