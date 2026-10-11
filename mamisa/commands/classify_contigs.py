@@ -34,8 +34,10 @@ from ..utils.read_taxonomy import parse_kraken2_output, parse_kaiju_output, pars
 from ..utils.contig_taxonomy import (
     parse_nodes_dmp,
     parse_mmseqs_taxonomy,
+    parse_mmseqs_lineage,
     assign_contigs_to_bins,
     summarize_bin_taxa,
+    summarize_bin_lineage,
     VALID_RANKS,
 )
 from ..utils.validation import validate_dir_exists, validate_file_exists
@@ -136,6 +138,13 @@ Examples
     --nodes-dmp /data/kaiju_db/nodes.dmp \\
     --names-dmp /data/kaiju_db/names.dmp \\
     --rank order
+
+  # MMseqs2 with a GTDB DB (via run-mmseqs-contigs, which adds --tax-lineage):
+  # the lineage column is used, so NO nodes.dmp is needed and ranks are GTDB's.
+  mamisa classify-contigs \\
+    --bins-dir bins/ \\
+    --mmseqs-output contig_tax.mmseqs.tsv \\
+    --rank class
         """
     )
 
@@ -158,10 +167,14 @@ Examples
                            'result, or run-mmseqs-contigs output); protein-level, '
                            'GTDB-capable - best for consistency with GTDB-Tk')
 
-    parser.add_argument('--nodes-dmp', type=Path, required=True,
-                        help='NCBI taxonomy nodes.dmp (ships with the Kraken2/Kaiju DB)')
+    parser.add_argument('--nodes-dmp', type=Path,
+                        help='NCBI taxonomy nodes.dmp (ships with the Kraken2/Kaiju DB). '
+                             'Required for Kraken2/Kaiju and for an MMseqs2 TSV without a '
+                             'lineage column; NOT needed for MMseqs2 run with '
+                             '--tax-lineage (e.g. a GTDB DB), where the lineage is used.')
     parser.add_argument('--names-dmp', type=Path,
-                        help='NCBI taxonomy names.dmp for human-readable taxon names')
+                        help='NCBI taxonomy names.dmp for human-readable taxon names '
+                             '(taxid/nodes.dmp path only)')
     parser.add_argument('--rank', default='order', choices=list(VALID_RANKS),
                         help='Rank at which to compare per-contig taxa (default: order)')
     parser.add_argument('--extensions', default='fa,fasta,fna',
@@ -176,7 +189,6 @@ Examples
 def run(args):
     """Execute classify-contigs."""
     validate_dir_exists(args.bins_dir, "Bins directory")
-    validate_file_exists(args.nodes_dmp, "nodes.dmp")
     if args.names_dmp and not args.names_dmp.exists():
         log_error(f"names.dmp not found: {args.names_dmp}")
         sys.exit(1)
@@ -192,17 +204,26 @@ def run(args):
 
     print_header("MaMISA - Per-Contig Taxonomy Check")
 
-    print_section("Loading classification and taxonomy tree")
+    print_section("Loading classification")
+    contig_lineage: Dict[str, str] = {}
     if args.mmseqs_output is not None:
         contig_taxid = parse_mmseqs_taxonomy(args.mmseqs_output)
+        contig_lineage = parse_mmseqs_lineage(args.mmseqs_output)
     elif args.kaiju_output is not None:
         contig_taxid = parse_kaiju_output(args.kaiju_output)
     else:
         contig_taxid = parse_kraken2_output(args.kraken2_output)
     log_info(f"Loaded taxon assignments for {len(contig_taxid):,} contigs")
 
-    nodes = parse_nodes_dmp(args.nodes_dmp)
-    names = parse_names_dmp(args.names_dmp) if args.names_dmp else None
+    use_lineage = bool(contig_lineage)
+    if not use_lineage:
+        # taxid path needs nodes.dmp to walk to the rank
+        if not args.nodes_dmp:
+            log_error("--nodes-dmp is required for Kraken2/Kaiju, or for an MMseqs2 "
+                      "TSV without a lineage column. Re-run run-mmseqs-contigs "
+                      "(it adds --tax-lineage), or pass --nodes-dmp.")
+            sys.exit(1)
+        validate_file_exists(args.nodes_dmp, "nodes.dmp")
 
     print_section("Mapping contigs to bins")
     bin_contigs = assign_contigs_to_bins(args.bins_dir, extensions)
@@ -211,7 +232,13 @@ def run(args):
         sys.exit(1)
 
     print_section(f"Resolving per-contig taxonomy at rank '{args.rank}'")
-    summary = summarize_bin_taxa(bin_contigs, contig_taxid, args.rank, nodes, names)
+    if use_lineage:
+        log_info("Using MMseqs2 lineage column (no nodes.dmp needed)")
+        summary = summarize_bin_lineage(bin_contigs, contig_lineage, args.rank)
+    else:
+        nodes = parse_nodes_dmp(args.nodes_dmp)
+        names = parse_names_dmp(args.names_dmp) if args.names_dmp else None
+        summary = summarize_bin_taxa(bin_contigs, contig_taxid, args.rank, nodes, names)
 
     contig_rows, bin_rows = build_rows(summary, contig_taxid)
 

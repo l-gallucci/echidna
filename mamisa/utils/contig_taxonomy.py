@@ -4,27 +4,27 @@ Per-contig taxonomy utilities (independent of GUNC).
 A bin whose contigs resolve to two or more taxa at a chosen rank is a
 taxonomic chimera: contigs of different taxonomy do not belong in one MAG at
 any rank. This mirrors the GUNC per-contig signal but uses a contig-level
-classifier (Kraken2 or Kaiju) and the NCBI taxonomy tree, so it is a fully
-independent corroborating signal.
+classifier (Kraken2, Kaiju or MMseqs2), so it is a fully independent
+corroborating signal.
 
-Flow
-----
-1. A contig-level classifier assigns one taxid per contig (Kraken2/Kaiju output
-   where the "sequence id" is the contig name; parsing is shared with the
-   read-level code since the file shape is identical).
-2. nodes.dmp gives each taxid its parent and rank, so a contig's LCA taxid is
-   walked UP to the requested rank (e.g. order). A contig classified only above
-   the rank cannot be resolved there and is left out (conservative: it cannot
-   prove a split).
-3. Per bin, count the distinct rank-level taxa across its contigs. >= 2 is a
-   chimera flag.
+Two ways to resolve a contig to the requested rank:
+- lineage: an MMseqs2 TSV written with `--tax-lineage 1` (or any GTDB lineage
+  string) carries `d_/p_/c_...`, so the rank is read straight from it - no
+  nodes.dmp, and ranks stay in the DB's system (GTDB). Preferred.
+- taxid + nodes.dmp: a Kraken2/Kaiju (or lineage-less MMseqs2) taxid is walked UP
+  the NCBI tree to the rank. A contig classified only above the rank stays
+  unresolved (conservative: it cannot prove a split).
+
+Then, per bin, the distinct rank-level taxa are counted (>= 2 flags a chimera)
+and the minority contigs are named as the likely foreign/contaminant ones.
 
 No third-party Python dependencies; nodes.dmp/names.dmp ship with every Kraken2
-or Kaiju database.
+or Kaiju database, and the lineage path needs neither.
 """
 
+import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .fasta import read_fasta_streaming
 from .logging import log_info, log_warning
@@ -36,6 +36,11 @@ _RANK_ALIASES = {'domain': 'superkingdom'}
 
 VALID_RANKS = ('domain', 'superkingdom', 'phylum', 'class', 'order',
                'family', 'genus', 'species')
+
+# Single rank letter used in semicolon lineage strings (MMseqs `--tax-lineage 1`
+# and GTDB both use d/p/c/o/f/g/s; MMseqs writes one underscore, GTDB two).
+_RANK_LETTER = {'domain': 'd', 'superkingdom': 'd', 'phylum': 'p', 'class': 'c',
+                'order': 'o', 'family': 'f', 'genus': 'g', 'species': 's'}
 
 
 def parse_mmseqs_taxonomy(tsv_file: Path) -> Dict[str, int]:
@@ -67,6 +72,56 @@ def parse_mmseqs_taxonomy(tsv_file: Path) -> Dict[str, int]:
     log_info(f"Loaded MMseqs2 taxonomy for {len(contig_taxid):,} contigs "
              f"from {tsv_file.name}")
     return contig_taxid
+
+
+def parse_mmseqs_lineage(tsv_file: Path) -> Dict[str, str]:
+    """
+    Parse the lineage column of an MMseqs2 taxonomy TSV produced with
+    ``mmseqs taxonomy --tax-lineage 1``. Columns are then:
+
+        query_id    taxid    rank    name    lineage
+
+    where lineage is a semicolon string like ``d_Bacteria;p_...;c_...``. Using
+    the lineage (instead of a taxid + nodes.dmp walk) is what lets this work with
+    a GTDB MMseqs database, which carries no NCBI nodes.dmp, and keeps the ranks
+    in GTDB's own system. Returns {contig: lineage_string}; contigs without a
+    lineage column are omitted.
+    """
+    contig_lineage: Dict[str, str] = {}
+    with open(tsv_file) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            fields = line.rstrip('\n').split('\t')
+            if len(fields) < 5:
+                continue
+            contig = fields[0].strip()
+            lineage = fields[4].strip()
+            if contig and lineage:
+                contig_lineage[contig] = lineage
+    if contig_lineage:
+        log_info(f"Loaded MMseqs2 lineage for {len(contig_lineage):,} contigs "
+                 f"from {tsv_file.name}")
+    return contig_lineage
+
+
+def extract_rank_from_lineage(lineage: str, rank: str) -> Optional[str]:
+    """
+    Pull one rank's name out of a semicolon lineage string. Tolerant to one or
+    two underscores after the rank letter (MMseqs `c_Gammaproteobacteria`, GTDB
+    `c__Gammaproteobacteria`). Returns None when the rank is absent (contig
+    classified only above it) so it is left unresolved, not counted as a split.
+    """
+    letter = _RANK_LETTER.get(rank)
+    if not letter:
+        return None
+    pat = re.compile(r'^' + letter + r'_+(.+)$')
+    for part in lineage.split(';'):
+        m = pat.match(part.strip())
+        if m:
+            name = m.group(1).strip()
+            return name or None
+    return None
 
 
 def parse_nodes_dmp(nodes_file: Path) -> Dict[int, Tuple[int, str]]:
@@ -148,6 +203,66 @@ def _taxon_name(taxid: int, names: Optional[Dict[int, Tuple[str, str]]]) -> str:
     return f"taxid:{taxid}"
 
 
+def _summarize_bins(
+    bin_contigs: Dict[str, List[str]],
+    contig_key: Dict[str, object],
+    label_fn: Callable[[object], str],
+    target_rank: str,
+) -> Dict[str, Dict]:
+    """
+    Shared core. ``contig_key`` maps each contig to a hashable rank-level key
+    (or None when the contig cannot be resolved at the rank). The key may be a
+    taxid (nodes.dmp path) or a taxon-name string (lineage path); ``label_fn``
+    turns a key into its display name.
+
+    Like MAGpurify2's taxonomy module, the bin's MAJORITY rank-taxon (most
+    contigs) is its identity and the remaining resolved contigs are reported as
+    foreign/minority contigs - the likely contaminants - so a single misplaced
+    contig is named, not just counted.
+    """
+    out: Dict[str, Dict] = {}
+    for bin_name, contigs in bin_contigs.items():
+        per_contig: Dict[str, Tuple[Optional[object], str]] = {}
+        keys: Set[object] = set()
+        key_count: Dict[object, int] = {}
+        for contig in contigs:
+            key = contig_key.get(contig)
+            if key is None:
+                per_contig[contig] = (None, 'unresolved')
+            else:
+                keys.add(key)
+                key_count[key] = key_count.get(key, 0) + 1
+                per_contig[contig] = (key, label_fn(key))
+
+        # Majority key = the bin's identity (ties broken deterministically on the
+        # display label). Everything else resolved is foreign.
+        majority_key: Optional[object] = None
+        if key_count:
+            majority_key = max(sorted(key_count, key=label_fn),
+                               key=key_count.get)
+        foreign_contigs = sorted(
+            (c, v[1]) for c, v in per_contig.items()
+            if v[0] is not None and v[0] != majority_key
+        )
+
+        out[bin_name] = {
+            'n_contigs': len(contigs),
+            'n_contigs_resolved': sum(1 for v in per_contig.values() if v[0] is not None),
+            'n_taxa': len(keys),
+            'taxa': sorted(label_fn(k) for k in keys),
+            'chimera': len(keys) >= 2,
+            'majority_taxon': majority_key,
+            'majority_name': (label_fn(majority_key)
+                              if majority_key is not None else 'N/A'),
+            'foreign_contigs': foreign_contigs,
+            'per_contig': per_contig,
+        }
+    n_chimeric = sum(1 for r in out.values() if r['chimera'])
+    log_info(f"Per-contig taxonomy at rank '{target_rank}': "
+             f"{n_chimeric:,}/{len(out):,} bins span >= 2 taxa")
+    return out
+
+
 def summarize_bin_taxa(
     bin_contigs: Dict[str, List[str]],
     contig_taxid: Dict[str, int],
@@ -156,59 +271,30 @@ def summarize_bin_taxa(
     names: Optional[Dict[int, Tuple[str, str]]] = None,
 ) -> Dict[str, Dict]:
     """
-    For each bin, resolve every contig's taxid up to ``target_rank`` and count
-    the distinct rank-level taxa.
-
-    Like MAGpurify2's taxonomy module, the bin's MAJORITY rank-taxon (most
-    contigs) is treated as the bin's identity and the remaining resolved contigs
-    are reported as foreign/minority contigs - the likely contaminants - so a
-    single misplaced contig in an otherwise clean MAG is named, not just counted.
-
-    Returns {bin: {n_contigs, n_contigs_resolved, n_taxa, taxa (sorted names),
-    chimera (bool, n_taxa >= 2), majority_taxon (taxid|None), majority_name,
-    foreign_contigs [(contig, rank_name), ...], per_contig {contig:
-    (rank_taxid|None, rank_name|'unresolved')}}}.
+    Resolve each contig's taxid up to ``target_rank`` via nodes.dmp (Kraken2 /
+    Kaiju / MMseqs-without-lineage path), then summarize per bin. ``majority_taxon``
+    is a taxid. See _summarize_bins for the shape.
     """
-    out: Dict[str, Dict] = {}
-    for bin_name, contigs in bin_contigs.items():
-        per_contig: Dict[str, Tuple[Optional[int], str]] = {}
-        rank_taxids: Set[int] = set()
-        taxid_contig_count: Dict[int, int] = {}
-        for contig in contigs:
-            taxid = contig_taxid.get(contig, 0)
-            rank_taxid = resolve_at_rank(taxid, target_rank, nodes)
-            if rank_taxid is None:
-                per_contig[contig] = (None, 'unresolved')
-            else:
-                rank_taxids.add(rank_taxid)
-                taxid_contig_count[rank_taxid] = taxid_contig_count.get(rank_taxid, 0) + 1
-                per_contig[contig] = (rank_taxid, _taxon_name(rank_taxid, names))
+    contig_key = {
+        contig: resolve_at_rank(contig_taxid.get(contig, 0), target_rank, nodes)
+        for contigs in bin_contigs.values() for contig in contigs
+    }
+    return _summarize_bins(
+        bin_contigs, contig_key, lambda t: _taxon_name(t, names), target_rank)
 
-        # Majority rank-taxon = the bin's identity (ties broken by taxid for a
-        # stable, reproducible pick). Everything else resolved is foreign.
-        majority_taxid: Optional[int] = None
-        if taxid_contig_count:
-            majority_taxid = max(sorted(taxid_contig_count),
-                                 key=taxid_contig_count.get)
-        foreign_contigs = sorted(
-            (c, v[1]) for c, v in per_contig.items()
-            if v[0] is not None and v[0] != majority_taxid
-        )
 
-        taxa = sorted(_taxon_name(t, names) for t in rank_taxids)
-        out[bin_name] = {
-            'n_contigs': len(contigs),
-            'n_contigs_resolved': sum(1 for v in per_contig.values() if v[0] is not None),
-            'n_taxa': len(rank_taxids),
-            'taxa': taxa,
-            'chimera': len(rank_taxids) >= 2,
-            'majority_taxon': majority_taxid,
-            'majority_name': (_taxon_name(majority_taxid, names)
-                              if majority_taxid is not None else 'N/A'),
-            'foreign_contigs': foreign_contigs,
-            'per_contig': per_contig,
-        }
-    n_chimeric = sum(1 for r in out.values() if r['chimera'])
-    log_info(f"Per-contig taxonomy at rank '{target_rank}': "
-             f"{n_chimeric:,}/{len(out):,} bins span >= 2 taxa")
-    return out
+def summarize_bin_lineage(
+    bin_contigs: Dict[str, List[str]],
+    contig_lineage: Dict[str, str],
+    target_rank: str,
+) -> Dict[str, Dict]:
+    """
+    Resolve each contig to its ``target_rank`` taxon name from a lineage string
+    (MMseqs `--tax-lineage 1` / GTDB), then summarize per bin. No nodes.dmp
+    needed; ``majority_taxon`` is the rank name string. See _summarize_bins.
+    """
+    contig_key = {
+        contig: extract_rank_from_lineage(contig_lineage.get(contig, ''), target_rank)
+        for contigs in bin_contigs.values() for contig in contigs
+    }
+    return _summarize_bins(bin_contigs, contig_key, lambda s: s, target_rank)

@@ -99,33 +99,43 @@ Medium to manual review (read the `reasons` column).
 
 ## classify-contigs
 
-Per-contig taxonomy check, independent of GUNC. Assigns each contig its
-classifier taxon (Kraken2 or Kaiju run on the contigs, not the reads), walks it
-up the NCBI tree to `--rank`, and per bin counts the distinct rank-level taxa.
-Two or more distinct taxa flags the bin as a taxonomic chimera. Like MAGpurify2's
-taxonomy module, the bin's **majority** rank-taxon is treated as its identity and
-the **minority (foreign) contigs are named** as the likely contaminants. Contigs
+Per-contig taxonomy check, independent of GUNC. Assigns each contig a taxon
+(Kraken2 or Kaiju on the contigs, or MMseqs2 via `run-mmseqs-contigs`), resolves
+it to `--rank`, and per bin counts the distinct rank-level taxa. Two or more
+distinct taxa flags the bin as a taxonomic chimera. Like MAGpurify2's taxonomy
+module, the bin's **majority** rank-taxon is treated as its identity and the
+**minority (foreign) contigs are named** as the likely contaminants. Contigs
 classified only above the rank are left unresolved (they cannot prove a split).
 Report-only; orthogonal to the GUNC/GC signals in check-chimeras.
 
-Produce the input first, e.g.:
-`kraken2 --db DB --output contigs.kraken2 all_contigs.fa`
-(the sequence-id column Kraken2/Kaiju emit is the contig name).
+Two resolution modes, picked automatically:
+- **lineage mode** (MMseqs2 run with `--tax-lineage`, which `run-mmseqs-contigs`
+  does): the rank is read from the per-contig lineage string, so **no nodes.dmp
+  is needed** and ranks stay in the DB's own system (GTDB when the DB is GTDB) -
+  the recommended path, consistent with GTDB-Tk.
+- **taxid mode** (Kraken2/Kaiju, or an MMseqs2 TSV with no lineage): each contig's
+  taxid is walked up the NCBI tree with `--nodes-dmp` (required here).
+
+Produce the input first, e.g. `kraken2 --db DB --output contigs.kraken2 all_contigs.fa`
+or `mamisa run-mmseqs-contigs ...` (the sequence-id column is the contig name).
 
 ```
 Required:
   --bins-dir PATH             Directory containing bin FASTA files
-  --nodes-dmp PATH            NCBI nodes.dmp (ships with the Kraken2/Kaiju DB)
   one classifier (mutually exclusive):
+    --mmseqs-output PATH      MMseqs2 taxonomy TSV (run-mmseqs-contigs); GTDB-capable
     --kraken2-output PATH     Kraken2 per-contig output (nucleotide, DB-biased)
     --kaiju-output PATH       Kaiju per-contig output (protein, more sensitive)
 
 Optional:
+  --nodes-dmp PATH            NCBI nodes.dmp - required for Kraken2/Kaiju and for an
+                              MMseqs2 TSV without a lineage column; not needed in
+                              lineage mode
   -o, --output PATH           Per-contig TSV (default: contig_taxonomy.tsv);
                               a per-bin summary is written as <output>.bins.tsv
-  --names-dmp PATH            NCBI names.dmp for human-readable taxon names
+  --names-dmp PATH            NCBI names.dmp for readable names (taxid mode only)
   --rank STR                  Rank to compare contigs at (default: order; 'domain'
-                              is accepted and maps to NCBI superkingdom)
+                              maps to NCBI superkingdom in taxid mode)
   --extensions LIST           Genome extensions (default: fa,fasta,fna)
   --dry-run
 ```
@@ -134,11 +144,11 @@ Per-contig columns: `contig`, `bin`, `contig_taxid`, `rank_taxon`, `is_foreign`.
 Per-bin columns: `bin`, `n_contigs`, `n_contigs_resolved`, `n_taxa`,
 `majority_taxon`, `chimera_flag`, `n_foreign_contigs`, `foreign_contigs`, `taxa`.
 
-Note: Kraken2/Kaiju use NCBI taxonomy, not GTDB, so the ranks will not line up
-one-to-one with GTDB-Tk downstream. For GTDB-consistent per-contig taxonomy use a
-GTDB-based classifier DB, or lean on GUNC `--contig-taxonomy-output` in
-check-chimeras. `order` is a good default rank: phylum is too coarse to separate
-related contaminants, genus/species gets noisy on short contigs.
+Rank choice: `order` is a good default; `class` separates class-level
+contaminants (e.g. an Alphaproteobacteria contig in a Gammaproteobacteria bin);
+phylum is too coarse, genus/species gets noisy on short contigs. In taxid mode
+Kraken2/Kaiju use NCBI taxonomy, so ranks will not line up one-to-one with
+GTDB-Tk - prefer MMseqs2 + a GTDB DB (lineage mode) for GTDB consistency.
 
 ## run-mmseqs-contigs
 
@@ -149,7 +159,9 @@ taxa, and its DB can be GTDB-derived so ranks match GTDB-Tk. Heavy dependency, s
 it lives in its own `mmseqs2` env: `conda run -n mmseqs2 mamisa run-mmseqs-contigs ...`.
 
 Needs a prebuilt MMseqs2 taxonomy DB (`--db`), e.g.
-`conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb tmp`.
+`conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb tmp`. `--db` is the
+MMseqs2 DB **prefix** (the handle, e.g. `/data/mmseqs_gtdb/gtdb`), not the folder
+or a single `.dbtype`/`.index` file.
 
 ```
 Required:
@@ -167,8 +179,11 @@ Optional:
   --dry-run                   Print the MMseqs2 commands without running
 ```
 
-Runs `mmseqs createdb` -> `mmseqs taxonomy` -> `mmseqs createtsv`. Note: contig
-headers must be unique across bins (they are concatenated into one query FASTA).
+Runs `mmseqs createdb` -> `mmseqs taxonomy --tax-lineage 1` -> `mmseqs createtsv`.
+The `--tax-lineage 1` is added automatically so the output carries a lineage
+column, letting `classify-contigs` resolve any rank without a nodes.dmp. Note:
+contig headers must be unique across bins (they are concatenated into one query
+FASTA).
 
 ## classify-clipping
 

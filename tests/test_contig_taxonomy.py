@@ -9,9 +9,12 @@ import pytest
 from mamisa.utils.contig_taxonomy import (
     parse_nodes_dmp,
     parse_mmseqs_taxonomy,
+    parse_mmseqs_lineage,
+    extract_rank_from_lineage,
     resolve_at_rank,
     assign_contigs_to_bins,
     summarize_bin_taxa,
+    summarize_bin_lineage,
 )
 from mamisa.commands import classify_contigs, run_mmseqs_contigs
 
@@ -169,11 +172,77 @@ def test_mmseqs_build_commands_order():
         Path('out.tsv'), Path('w'), 8, [])
     labels = [s[0] for s in steps]
     assert labels == ['createdb', 'taxonomy', 'createtsv']
-    # taxonomy step references the target DB and threads
+    # taxonomy step references the target DB, threads and emits the lineage column
     tax = steps[1][1]
     assert '/db/gtdb' in tax and '--threads' in tax and '8' in tax
+    assert '--tax-lineage' in tax and '1' in tax
     # createtsv writes the final output
     assert str(Path('out.tsv')) in steps[2][1]
+
+
+def test_mmseqs_build_commands_user_lineage_not_duplicated():
+    steps = run_mmseqs_contigs.build_commands(
+        'mmseqs', Path('w/c.fa'), Path('/db'), Path('o.tsv'), Path('w'), 4,
+        ['--tax-lineage', '2'])
+    tax = steps[1][1]
+    assert tax.count('--tax-lineage') == 1       # user's value kept, not doubled
+
+
+# ---- lineage mode (MMseqs2 --tax-lineage / GTDB; no nodes.dmp) -------------
+
+def test_extract_rank_from_lineage_single_and_double_underscore():
+    mm = "d_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria;o_Enterobacterales"
+    gtdb = "d__Bacteria;p__Pseudomonadota;c__Alphaproteobacteria"
+    assert extract_rank_from_lineage(mm, 'class') == 'Gammaproteobacteria'
+    assert extract_rank_from_lineage(mm, 'order') == 'Enterobacterales'
+    assert extract_rank_from_lineage(gtdb, 'class') == 'Alphaproteobacteria'
+    # rank absent from lineage -> None (contig only classified higher)
+    assert extract_rank_from_lineage(mm, 'genus') is None
+    assert extract_rank_from_lineage("d_Bacteria", 'class') is None
+
+
+def test_parse_mmseqs_lineage(tmp_path):
+    f = tmp_path / "tax.tsv"
+    f.write_text(
+        "c1\t1224\tclass\tGammaproteobacteria\td_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria\n"
+        "c2\t28211\tclass\tAlphaproteobacteria\td_Bacteria;p_Pseudomonadota;c_Alphaproteobacteria\n"
+        "c3\t0\tno rank\tunclassified\n")          # no lineage column -> omitted
+    out = parse_mmseqs_lineage(f)
+    assert set(out) == {'c1', 'c2'}
+    assert out['c1'].endswith('c_Gammaproteobacteria')
+
+
+def test_summarize_bin_lineage_flags_foreign_class():
+    bin_contigs = {'bin1': ['c1', 'c2', 'c3']}
+    lineage = {
+        'c1': "d_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria",
+        'c2': "d_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria",
+        'c3': "d_Bacteria;p_Pseudomonadota;c_Alphaproteobacteria",  # foreign
+    }
+    out = summarize_bin_lineage(bin_contigs, lineage, 'class')
+    rec = out['bin1']
+    assert rec['chimera'] is True and rec['n_taxa'] == 2
+    assert rec['majority_taxon'] == 'Gammaproteobacteria'   # key is the name string
+    assert [c for c, _ in rec['foreign_contigs']] == ['c3']
+
+
+def test_summarize_bin_lineage_unresolved_above_rank():
+    # a contig classified only to phylum is unresolved at class -> no split
+    bin_contigs = {'b': ['c1', 'c2']}
+    lineage = {'c1': "d_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria",
+               'c2': "d_Bacteria;p_Pseudomonadota"}
+    out = summarize_bin_lineage(bin_contigs, lineage, 'class')
+    assert out['b']['n_taxa'] == 1 and out['b']['chimera'] is False
+
+
+def test_classify_contigs_nodes_optional_for_mmseqs():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers()
+    classify_contigs.register_parser(sub)
+    # MMseqs2 path without nodes.dmp parses fine (lineage mode)
+    args = parser.parse_args(['classify-contigs', '--bins-dir', 'bins',
+                              '--mmseqs-output', 'c.tsv', '--rank', 'class'])
+    assert args.nodes_dmp is None and args.rank == 'class'
 
 
 def test_mmseqs_run_requires_db_and_output():

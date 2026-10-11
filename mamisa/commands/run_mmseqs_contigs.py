@@ -73,11 +73,14 @@ def build_commands(exe: str, query_fasta: Path, seq_tax_db: Path,
     query_db = tmp_dir / "queryDB"
     tax_result = tmp_dir / "taxResult"
     mmseqs_tmp = tmp_dir / "tmp"
+    # Emit the full lineage column so classify-contigs can resolve any rank
+    # without an NCBI nodes.dmp (works with a GTDB DB). Skip if the user set it.
+    lineage = [] if '--tax-lineage' in extra_args else ['--tax-lineage', '1']
     return [
         ("createdb", [exe, 'createdb', str(query_fasta), str(query_db)]),
         ("taxonomy", [exe, 'taxonomy', str(query_db), str(seq_tax_db),
                       str(tax_result), str(mmseqs_tmp),
-                      '--threads', str(threads)] + extra_args),
+                      '--threads', str(threads)] + lineage + extra_args),
         ("createtsv", [exe, 'createtsv', str(query_db), str(tax_result),
                        str(output_tsv)]),
     ]
@@ -96,10 +99,10 @@ Then:
   conda run -n mmseqs2 mamisa run-mmseqs-contigs \\
     --bins-dir bins/ --db /data/mmseqs_gtdb -o contig_taxonomy.mmseqs.tsv --threads 40
 
-Feed the result to classify-contigs:
+Feed the result to classify-contigs (the TSV carries a lineage column, so no
+nodes.dmp is needed and ranks stay in GTDB's system):
   mamisa classify-contigs --bins-dir bins/ \\
-    --mmseqs-output contig_taxonomy.mmseqs.tsv \\
-    --nodes-dmp /data/mmseqs_gtdb_nodes.dmp --rank order
+    --mmseqs-output contig_taxonomy.mmseqs.tsv --rank class
         """
     )
     parser.add_argument('--bins-dir', type=Path, required=True,
