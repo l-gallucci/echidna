@@ -71,17 +71,48 @@ per-contig multi-clade signal. run-mimag-rna is optional (full-MIMAG HQ gate).
 
 ## How to run
 
-### Per command (simplest)
+### One command per branch (`*-wf`, like `gtdbtk classify_wf`)
 
-Each command runs in its tool's conda env; see
-[installation.md](installation.md) for the envs and
-[pipeline.md](pipeline.md) for copy-paste commands with real paths.
+Each branch has a single command that chains its steps, calling every
+sub-command in the right conda env for you. Run them from the `mamisa` env.
+
+```bash
+# Branch A - misassembly cleaning (PacBio HiFi only)
+mamisa misassembly-wf \
+    --assembly assembly.fa --bam hifi_mapping.bam -o misasm_wf/ --threads 40 \
+    --anvio-env anvio-9 --checkm2-env checkm2 \
+    --kraken2-output reads.kraken2 --kraken2-report report.txt   # optional taxonomy
+
+# Branch B - MAG quality + taxonomy
+mamisa mag-quality-wf \
+    --bins-dir bins/ -o mag_wf/ --threads 40 --tiers HQ,MQ \
+    --gtdbtk-data /data/gtdbtk_r220 --gunc-db /data/gunc/gunc_db_gtdb214.dmnd \
+    --split-by-domain
+```
+
+Both accept `--dry-run` (print the commands without running), `--from <step>`
+(resume after fixing a failure) and `--skip <step[,step]>`. The step keys are
+printed by `--dry-run` and listed in [command-reference.md](command-reference.md).
+`mag-quality-wf` freezes genome names after the first tiering so GUNC,
+check-chimeras and run-mimag-rna all match (no rename until the final step), and
+passes `--contig-taxonomy-output` to GUNC automatically.
+
+The `*-wf` commands shell out to `conda run -n <env> ...`, so the tool envs must
+exist and have MaMISA installed (including the anvi'o env, for
+`run-anvi-misassemblies`). See [installation.md](installation.md).
+
+### Per command (full control)
+
+Run each command yourself in its env; see [pipeline.md](pipeline.md) for
+copy-paste commands with real paths.
 
 ### Snakemake (one DAG, clusters)
 
-`workflow/Snakefile` orchestrates Branch B end to end across the envs. Configure
-once with `setup-workflow`, then `snakemake --cores N ...`. See
-[`../workflow/README.md`](../workflow/README.md) and [hpc.md](hpc.md).
+`workflow/Snakefile` orchestrates Branch B end to end across the envs (target
+`all` or the explicit `all_mag_quality`). Configure once with `setup-workflow`,
+then `snakemake --cores N ...`. The misassembly branch is not in the Snakefile;
+use `misassembly-wf` for it. See [`../workflow/README.md`](../workflow/README.md)
+and [hpc.md](hpc.md).
 
 ## Regenerating the diagrams
 

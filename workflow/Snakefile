@@ -55,6 +55,14 @@ rule all:
         f"{OUT}/organized/merged_quality.tsv",
 
 
+# Named preset for the MAG-quality branch (same targets as `all`), so you can be
+# explicit: `snakemake all_mag_quality ...`. The misassembly branch is not in
+# this Snakefile; run it with `mamisa misassembly-wf` (PacBio HiFi only).
+rule all_mag_quality:
+    input:
+        rules.all.input
+
+
 rule run_checkm2:
     input:
         genomes=GENOMES,

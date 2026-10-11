@@ -23,6 +23,9 @@ from mamisa.commands import check_zero_coverage
 from mamisa.commands import setup_workflow
 from mamisa.commands import fetch_databases
 from mamisa.commands import check_envs
+from mamisa.commands import run_anvi_misassemblies
+from mamisa.commands import misassembly_wf
+from mamisa.commands import mag_quality_wf
 from mamisa import __version__
 
 
@@ -79,6 +82,9 @@ For more information, visit: https://github.com/l-gallucci/mamisa
     setup_workflow.register_parser(subparsers)
     fetch_databases.register_parser(subparsers)
     check_envs.register_parser(subparsers)
+    run_anvi_misassemblies.register_parser(subparsers)
+    misassembly_wf.register_parser(subparsers)
+    mag_quality_wf.register_parser(subparsers)
     
     # Parse arguments
     args = parser.parse_args()

@@ -378,3 +378,76 @@ Optional (at least one):
   --mimag-env NAME            Env with barrnap + tRNAscan-SE
   --repo PATH                 MaMISA checkout used in fix hints
 ```
+
+## run-anvi-misassemblies
+
+Wrapper around anvi'o `anvi-script-find-misassemblies` (soft-clipping detection,
+PacBio HiFi only). Run inside the anvi'o env. `--just-do-it` is on by default
+(anvi'o refuses to proceed without it non-interactively).
+
+```
+Required:
+  -b, --bam PATH              Sorted, indexed HiFi BAM mapped to the assembly
+  -o, --output-prefix PATH    Writes <prefix>-clipping.txt (parent dir = misassemblies dir)
+
+Optional:
+  -T, --threads INT           Threads (default: 1)
+  --clipping-ratio FLOAT      anvi clipping ratio (default: 0.8)
+  --min-dist-to-end INT       anvi min distance to contig end (default: 100)
+  --no-just-do-it             Do not pass --just-do-it to anvi'o
+  --anvi-args STR             Extra args passed to anvi-script-find-misassemblies
+```
+
+## misassembly-wf
+
+Runs the whole misassembly-cleaning branch (PacBio HiFi only), each step in the
+right env. Steps: `anvi` -> `process` -> `readchim` (only if Kraken2/Kaiju
+taxonomy is given) -> `classify` -> `filter`.
+
+```
+Required:
+  -a, --assembly PATH         Assembly FASTA (reads were mapped to this)
+  -b, --bam PATH              Sorted, indexed HiFi BAM
+  -o, --output-dir PATH       Base output directory
+
+Optional:
+  --threads INT               Threads (default: 1)
+  --anvio-env NAME            Env with anvi'o + MaMISA (default: anvio-9)
+  --checkm2-env NAME          Env with CheckM2 (default: checkm2)
+  --anvi-prefix STR           Prefix for clipping files (default: MisAsm)
+  --max-length / --min-completeness / --max-contamination   process-large-contigs tuning
+  --kraken2-output PATH  --kraken2-report PATH    enable check-read-chimeras (Kraken2)
+  --kaiju-output PATH    --kaiju-names PATH        enable check-read-chimeras (Kaiju)
+  --from STEP                 Resume at a step
+  --skip STEP[,STEP]          Skip steps
+  --dry-run                   Print commands without running
+```
+
+## mag-quality-wf
+
+Runs the whole MAG quality + taxonomy branch from a bin set, each step in the
+right env. Steps: `checkm2` -> `organize1` -> `gtdbtk` -> `gunc` -> `mimag` ->
+`chimeras` -> `organize2`. Genome names are frozen after `organize1` so GUNC,
+check-chimeras and run-mimag-rna match; GUNC is run with
+`--contig-taxonomy-output`.
+
+```
+Required:
+  --bins-dir PATH             Directory of bin FASTA files (from binning)
+  -o, --output-dir PATH       Base output directory
+
+Optional:
+  --threads INT               Threads (default: 1)
+  --tiers LIST                Tiers to carry downstream (default: HQ,MQ)
+  --genome-ext STR            Bin extension without dot (default: fa)
+  --mamisa-env NAME           Env for pure-MaMISA steps (default: current env)
+  --checkm2-env / --gtdbtk-env / --gunc-env / --mimag-env   tool envs
+  --gtdbtk-data PATH          GTDB-Tk data dir (sets GTDBTK_DATA_PATH)
+  --gunc-db PATH              GUNC .dmnd (else $GUNC_DB)
+  --checkm2-db PATH           CheckM2 .dmnd (else CheckM2 default)
+  --split-by-domain           run-mimag-rna picks bac/arc per genome from GTDB-Tk
+  --skip-mimag                Skip the rRNA/tRNA MIMAG HQ gate
+  --from STEP                 Resume at a step
+  --skip STEP[,STEP]          Skip steps
+  --dry-run                   Print commands without running
+```

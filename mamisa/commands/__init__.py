@@ -11,6 +11,9 @@ from . import check_chimeras
 from . import check_read_chimeras
 from . import classify_clipping
 from . import check_zero_coverage
+from . import run_anvi_misassemblies
+from . import misassembly_wf
+from . import mag_quality_wf
 
 __all__ = [
     'filter_misassemblies',
@@ -22,4 +25,7 @@ __all__ = [
     'check_read_chimeras',
     'classify_clipping',
     'check_zero_coverage',
+    'run_anvi_misassemblies',
+    'misassembly_wf',
+    'mag_quality_wf',
 ]

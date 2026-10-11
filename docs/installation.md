@@ -35,7 +35,7 @@ conda env. So the layout is:
 | `gtdbtk` | GTDB-Tk (+ MaMISA) | `run-gtdbtk` |
 | `gunc` | GUNC + DIAMOND + Prodigal (+ MaMISA) | `run-gunc` |
 | `mimag` | barrnap + tRNAscan-SE (+ MaMISA) | `run-mimag-rna` |
-| `anvio-9` | anvi'o (upstream, no MaMISA needed) | produces the `*-clipping.txt` inputs |
+| `anvio-9` | anvi'o (+ MaMISA) | `run-anvi-misassemblies` (produces the `*-clipping.txt` inputs) |
 
 Do I need all of them? Only the ones whose commands you use. Just want
 `organize-mags` / `check-chimeras`? The `mamisa` env alone is enough. Want the full
@@ -63,6 +63,9 @@ to be on `PATH` for the command that uses it.
 | `check-zero-coverage` | BLAST+ (`blastn`/`makeblastdb`), optional Meryl |
 | `filter-misassemblies` | anvi'o (upstream misassembly detection) |
 | `organize-mags` (was `filter-checkm2`) | (none; consumes CheckM2 + GTDB-Tk output) |
+| `run-anvi-misassemblies` | anvi'o (`anvi-script-find-misassemblies`) |
+| `misassembly-wf` | orchestrator; needs the anvio-9 + checkm2 envs (and mamisa) |
+| `mag-quality-wf` | orchestrator; needs the checkm2 + gtdbtk + gunc + mimag envs |
 
 ## Create the environments
 
@@ -93,8 +96,10 @@ conda run -n gunc pip install -e .
 mamba create -n mimag -c conda-forge -c bioconda barrnap trnascan-se
 conda run -n mimag pip install -e .
 
-# 6) anvi'o - upstream only, produces *-clipping.txt (no MaMISA needed)
+# 6) anvi'o - produces *-clipping.txt. Add MaMISA so `run-anvi-misassemblies`
+#    and `misassembly-wf` can drive it inside this env.
 mamba create -n anvio-9 -c conda-forge -c bioconda anvio=9
+conda run -n anvio-9 pip install -e .
 ```
 
 Check everything is compatible at any time:
