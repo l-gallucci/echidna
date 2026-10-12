@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/l-gallucci/echidna/main/assets/LOGO.jpg" alt="Echidna Logo" width="400">
+</p>
+
+<h1 align="center">Echidna</h1>
+
+<p align="center">
+  Un tool di testing e fuzzing per contratti intelligenti.
+</p>
+
 # Echidna - metagenomic assembly, MAG integrity and chimera screening
 
 A dependency-free Python toolkit for metagenomic assembly quality control: from a
