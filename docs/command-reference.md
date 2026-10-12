@@ -187,13 +187,13 @@ FASTA).
 
 ## check-ssu-taxonomy
 
-Classifies each MAG's 16S/SSU rRNA gene (blastn vs an SSU reference DB) and
-checks it agrees with the genome-level GTDB-Tk taxonomy. A 16S resolving to a
+Classifies each MAG's 16S rRNA genes (blastn vs an SSU reference DB)
+and checks they agree with the genome-level GTDB-Tk taxonomy. A 16S resolving to a
 different taxon than the genome flags misbinning or a contaminating rRNA -
 orthogonal to the GUNC/GC/MMseqs per-contig signals. Report-only.
 
-Only MAGs with a recovered ~full-length 16S are judged (rRNA is often
-fragmented/unbinned), and it is confirmatory, not exhaustive. The 16S comes from
+Only recovered ~full-length 16S records are judged (rRNA is often
+fragmented/unbinned), and it is confirmatory, not exhaustive. The 16S records come from
 `run-mimag-rna --outseq` (barrnap writes `<genome>.rrna.fna` into
 `<output>/rrna_fasta/`). blastn is in the echidna env; barrnap runs in the mimag
 env - so extraction and classification stay in their own envs.
@@ -220,9 +220,11 @@ Optional:
   --keep-tmp                  Keep the combined query FASTA and blast TSV
 ```
 
-Output columns: `genome`, `has_16s`, `ssu_len`, `ssu_pident`, `ssu_taxon`,
-`genome_taxon`, `agree` (True/False/NA), `note` (`no_16s`, `partial_16s`,
-`no_blast_hit`, `low_identity`). `agree=False` is the flag to review.
+Output columns: `genome`, `ssu_id`, `ssu_type`, `has_16s`, `ssu_len`,
+`ssu_pident`, `ssu_taxon`, `genome_taxon`, `agree` (True/False/NA), `note`
+(`no_16s`, `partial_16s`, `no_blast_hit`, `low_identity`). Each recovered 16S
+gets its own row; 18S/23S/5S records are ignored. `agree=False` is the flag to
+review.
 
 DB choice: GTDB SSU keeps names aligned with GTDB-Tk so `agree` is meaningful;
 SILVA is broader (better 16S coverage) but its names differ (e.g. Proteobacteria

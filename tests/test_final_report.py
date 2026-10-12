@@ -45,6 +45,20 @@ def test_parse_ssu_report(tmp_path):
     assert out['binB']['ssu_taxon'] == 'Gammaproteobacteria'
 
 
+def test_parse_ssu_report_aggregates_multiple_rows(tmp_path):
+    f = tmp_path / "ssu.tsv"
+    f.write_text("genome\tagree\tssu_taxon\n"
+                 "binA\tTrue\tGammaproteobacteria\n"
+                 "binA\tFalse\tAlphaproteobacteria\n"
+                 "binB\tNA\tNA\n"
+                 "binB\tTrue\tBacilli\n")
+    out = parse_ssu_report(f)
+    assert out['binA']['agree'] == 'False'
+    assert out['binA']['ssu_taxon'] == 'Gammaproteobacteria;Alphaproteobacteria'
+    assert out['binB']['agree'] == 'True'
+    assert out['binB']['ssu_taxon'] == 'Bacilli'
+
+
 def test_build_report_join_and_concerns():
     universe = {'binA', 'binB'}
     checkm2 = {'binA': {'completeness': 95.0, 'contamination': 12.0},   # contam>10

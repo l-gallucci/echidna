@@ -8,7 +8,7 @@ import pytest
 
 from echidna.utils.ssu_taxonomy import (
     extract_ssu_records, longest_ssu, parse_blast_best,
-    ssu_taxon_at_rank, normalize_taxon, taxa_agree,
+    ssu_taxon_at_rank, silva_lineage_parts, normalize_taxon, taxa_agree,
 )
 from echidna.commands import check_ssu_taxonomy, run_mimag_rna
 
@@ -23,14 +23,26 @@ def test_extract_ssu_records_filters_16s(tmp_path):
     recs = extract_ssu_records(f)
     names = [n for n, _ in recs]
     assert any(n.startswith('16S_rRNA') for n in names)
-    assert any(n.startswith('18S_rRNA') for n in names)
-    assert not any(n.startswith('23S') or n.startswith('5S') for n in names)
+    assert not any(n.startswith(('18S_rRNA', '23S_rRNA', '5S_rRNA')) for n in names)
 
 
 def test_longest_ssu():
     recs = [('16S_rRNA::a', 'AAA'), ('16S_rRNA::b', 'AAAAAAAA')]
     assert longest_ssu(recs)[0] == '16S_rRNA::b'
     assert longest_ssu([]) is None
+
+
+def test_collect_ssu_records_keeps_multiple_16s_only(tmp_path):
+    d = tmp_path / "rrna"
+    d.mkdir()
+    (d / "binA.rrna.fna").write_text(
+        ">16S_rRNA::c1:1-1500(+)\n" + "A" * 1500 + "\n"
+        ">16S_rRNA::c2:1-1400(+)\n" + "C" * 1400 + "\n"
+        ">18S_rRNA::c3:1-1800(+)\n" + "G" * 1800 + "\n"
+        ">23S_rRNA::c4:1-2900(+)\n" + "T" * 2900 + "\n")
+    out = check_ssu_taxonomy.collect_ssu_records(d)
+    assert [r['type'] for r in out['binA']] == ['16S', '16S']
+    assert [r['len'] for r in out['binA']] == [1500, 1400]
 
 
 def test_parse_blast_best_keeps_highest_bitscore_and_stitle(tmp_path):
@@ -58,6 +70,24 @@ def test_ssu_taxon_at_rank_silva_positional():
     assert ssu_taxon_at_rank(stitle, 'class', 'silva') == 'Gammaproteobacteria'
     assert ssu_taxon_at_rank(stitle, 'phylum', 'silva') == 'Proteobacteria'
     assert ssu_taxon_at_rank(stitle, 'order', 'silva') == 'Enterobacterales'
+
+
+def test_ssu_taxon_at_rank_silva_handles_species_spaces_and_no_accession():
+    stitle = ("Bacteria;Proteobacteria;Gammaproteobacteria;Enterobacterales;"
+              "Enterobacteriaceae;Escherichia-Shigella;Escherichia coli")
+    assert ssu_taxon_at_rank(stitle, 'domain', 'silva') == 'Bacteria'
+    assert ssu_taxon_at_rank(stitle, 'genus', 'silva') == 'Escherichia-Shigella'
+    assert ssu_taxon_at_rank(stitle, 'species', 'silva') == 'Escherichia coli'
+
+
+def test_silva_lineage_parts_drops_accession_without_breaking_taxa():
+    stitle = ("AB123456.1.1490 Archaea;Halobacterota;Methanosarcinia;"
+              "Methanosarcinales;Methanosarcinaceae;Methanosarcina;"
+              "Methanosarcina mazei")
+    parts = silva_lineage_parts(stitle)
+    assert parts[0] == 'Archaea'
+    assert parts[5] == 'Methanosarcina'
+    assert parts[6] == 'Methanosarcina mazei'
 
 
 def test_normalize_taxon_strips_gtdb_suffix():

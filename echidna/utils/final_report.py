@@ -65,13 +65,34 @@ def parse_contig_taxonomy_bins(path: Path) -> Dict[str, Dict]:
 
 
 def parse_ssu_report(path: Path) -> Dict[str, Dict]:
-    """check-ssu-taxonomy ssu_taxonomy.tsv -> {genome: {agree, ssu_taxon}}."""
+    """check-ssu-taxonomy ssu_taxonomy.tsv -> {genome: {agree, ssu_taxon}}.
+
+    Newer reports may contain multiple SSU rows per genome. Aggregate
+    conservatively: any disagreement makes the genome-level result False; if
+    there are no disagreements, any agreement makes it True; otherwise NA.
+    """
     out: Dict[str, Dict] = {}
     for row in _read_tsv(path):
         g = norm_name(row.get('genome') or '')
-        if g:
-            out[g] = {'agree': (row.get('agree') or 'NA').strip(),
-                      'ssu_taxon': (row.get('ssu_taxon') or 'NA').strip()}
+        if not g:
+            continue
+        agree = (row.get('agree') or 'NA').strip()
+        taxon = (row.get('ssu_taxon') or 'NA').strip()
+        if g not in out:
+            out[g] = {'agree': agree, 'ssu_taxon': taxon}
+            continue
+        prev = out[g]
+        if agree == 'False' or prev['agree'] == 'False':
+            prev['agree'] = 'False'
+        elif agree == 'True' or prev['agree'] == 'True':
+            prev['agree'] = 'True'
+        else:
+            prev['agree'] = 'NA'
+        if taxon != 'NA':
+            taxa = [t for t in prev['ssu_taxon'].split(';') if t and t != 'NA']
+            if taxon not in taxa:
+                taxa.append(taxon)
+            prev['ssu_taxon'] = ';'.join(taxa) if taxa else 'NA'
     return out
 
 

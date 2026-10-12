@@ -9,7 +9,7 @@ contaminating rRNA from another organism.
 Flow
 ----
 1. barrnap (run-mimag-rna --outseq) writes the rRNA genes per genome; we keep
-   the 16S (or 18S) record.
+   the 16S records.
 2. blastn the 16S against an SSU reference DB (GTDB ssu_all, or SILVA).
 3. Read the best hit's taxon at a chosen rank and compare it to the genome's
    GTDB-Tk taxon at the same rank.
@@ -35,7 +35,7 @@ from .validation import check_dependencies
 
 
 # barrnap --outseq headers look like "16S_rRNA::contig:123-1600(+)".
-_SSU_PREFIXES = ('16S_rRNA', '18S_rRNA')
+_SSU_PREFIXES = ('16S_rRNA',)
 
 # blastn tabular columns we request (stitle LAST so it can contain spaces/;).
 BLAST_OUTFMT = '6 qseqid sseqid pident length slen bitscore stitle'
@@ -43,10 +43,11 @@ BLAST_OUTFMT = '6 qseqid sseqid pident length slen bitscore stitle'
 # SILVA lineage is positional (no rank prefixes): Domain;Phylum;Class;Order;...
 _SILVA_RANK_INDEX = {'domain': 0, 'superkingdom': 0, 'phylum': 1, 'class': 2,
                      'order': 3, 'family': 4, 'genus': 5, 'species': 6}
+_SILVA_ROOTS = ('Bacteria', 'Archaea', 'Eukaryota')
 
 
 def extract_ssu_records(rrna_fasta: Path) -> List[Tuple[str, str]]:
-    """Return the (header, seq) of SSU (16S/18S) rRNA genes in a barrnap
+    """Return the (header, seq) of 16S rRNA genes in a barrnap
     --outseq FASTA. Empty when none found (or file missing)."""
     if not Path(rrna_fasta).exists():
         return []
@@ -135,16 +136,48 @@ def ssu_taxon_at_rank(stitle: str, rank: str, scheme: str) -> Optional[str]:
         return None
     if scheme == 'gtdb':
         return extract_rank_from_lineage(stitle, rank)
-    # SILVA: "<accession> Domain;Phylum;Class;..." -> drop the accession token
+    # SILVA tax_silva FASTA titles usually look like:
+    # "<accession> Domain;Phylum;Class;Order;Family;Genus;Species"
+    # Locate the root taxon instead of blindly splitting on whitespace; species
+    # names and environmental labels may contain spaces.
     idx = _SILVA_RANK_INDEX.get(rank)
     if idx is None:
         return None
-    body = stitle.split(None, 1)
-    lineage = body[1] if len(body) == 2 else body[0]
-    parts = [p.strip() for p in lineage.split(';') if p.strip()]
+    parts = silva_lineage_parts(stitle)
     if idx < len(parts):
         return parts[idx] or None
     return None
+
+
+def silva_lineage_parts(stitle: str) -> List[str]:
+    """Return positional SILVA lineage parts from a BLAST subject title.
+
+    The parser accepts both common forms:
+    - accession followed by lineage: ``AB123 Bacteria;...``
+    - lineage only: ``Bacteria;...``
+
+    It anchors on the first SILVA root taxon so accessions are discarded without
+    damaging terminal taxa such as ``Escherichia coli``.
+    """
+    if not stitle:
+        return []
+    title = stitle.strip()
+    root_pos = -1
+    for root in _SILVA_ROOTS:
+        for needle in (f"{root};", f"{root} ;"):
+            pos = title.find(needle)
+            if pos >= 0 and (root_pos < 0 or pos < root_pos):
+                root_pos = pos
+    lineage = title[root_pos:] if root_pos >= 0 else _drop_accession_token(title)
+    return [p.strip() for p in lineage.split(';') if p.strip()]
+
+
+def _drop_accession_token(title: str) -> str:
+    """Fallback for unusual SILVA-like titles where the root was not found."""
+    fields = title.split(None, 1)
+    if len(fields) == 2 and ';' in fields[1]:
+        return fields[1]
+    return title
 
 
 def normalize_taxon(name: Optional[str]) -> str:

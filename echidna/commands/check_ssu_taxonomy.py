@@ -15,7 +15,7 @@ compares 1:1 with GTDB-Tk (use --ssu-taxonomy gtdb). SILVA is broader but uses
 different names (--ssu-taxonomy silva), so agreement is best-effort at high
 ranks. Build with: makeblastdb -in ssu.fna -dbtype nucl -out <db>.
 
-Report-only. Only MAGs with a recovered ~full-length 16S are judged.
+Report-only. Only recovered ~full-length 16S records are judged.
 """
 
 import csv
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..utils.ssu_taxonomy import (
-    extract_ssu_records, longest_ssu, check_blastn, run_blastn,
+    extract_ssu_records, check_blastn, run_blastn,
     parse_blast_best, ssu_taxon_at_rank, taxa_agree,
 )
 from ..utils.chimera import parse_gtdbtk_summary, extract_taxonomy_level
@@ -35,8 +35,8 @@ from ..utils.validation import validate_dir_exists
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
 
 
-OUT_FIELDS = ['genome', 'has_16s', 'ssu_len', 'ssu_pident', 'ssu_taxon',
-              'genome_taxon', 'agree', 'note']
+OUT_FIELDS = ['genome', 'ssu_id', 'ssu_type', 'has_16s', 'ssu_len',
+              'ssu_pident', 'ssu_taxon', 'genome_taxon', 'agree', 'note']
 
 
 def _find_gtdbtk_summaries(gtdbtk_dir: Path) -> List[Path]:
@@ -53,16 +53,29 @@ def load_genome_taxonomy(gtdbtk_dir: Path, rank: str) -> Dict[str, str]:
     return taxo
 
 
-def collect_longest_16s(ssu_dir: Path) -> Dict[str, Dict]:
-    """Map genome -> {'seq', 'len'} for the longest 16S per <genome>.rrna.fna."""
-    out: Dict[str, Dict] = {}
+def _ssu_type(header: str) -> str:
+    return header.split('_rRNA', 1)[0] if '_rRNA' in header else 'SSU'
+
+
+def collect_ssu_records(ssu_dir: Path) -> Dict[str, List[Dict]]:
+    """Map genome -> 16S records from each <genome>.rrna.fna.
+
+    All barrnap 16S records are retained. Other rRNAs such as 18S, 23S, and 5S
+    are ignored by extract_ssu_records().
+    """
+    out: Dict[str, List[Dict]] = {}
     for fasta in sorted(ssu_dir.rglob('*.rrna.fna')):
         genome = fasta.name[:-len('.rrna.fna')]
-        best = longest_ssu(extract_ssu_records(fasta))
-        if best is not None:
-            out[genome] = {'seq': best[1], 'len': len(best[1])}
-        else:
-            out[genome] = {'seq': None, 'len': 0}
+        records = []
+        for i, (header, seq) in enumerate(extract_ssu_records(fasta), start=1):
+            records.append({
+                'query_id': f"{genome}__ssu{i}",
+                'header': header,
+                'type': _ssu_type(header),
+                'seq': seq,
+                'len': len(seq),
+            })
+        out[genome] = records
     return out
 
 
@@ -134,7 +147,7 @@ def run(args):
         sys.exit(1)
 
     print_section("Collecting 16S and genome taxonomy")
-    ssu = collect_longest_16s(args.ssu_fasta_dir)
+    ssu = collect_ssu_records(args.ssu_fasta_dir)
     if not ssu:
         log_error(f"No *.rrna.fna in {args.ssu_fasta_dir} "
                   "(run run-mimag-rna with --outseq first)")
@@ -143,13 +156,14 @@ def run(args):
     log_info(f"{len(ssu):,} genomes with rRNA FASTA; "
              f"{len(genome_taxa):,} with GTDB-Tk taxonomy")
 
-    # Build one query FASTA (header = genome) for genomes with a usable 16S.
+    # Build one query FASTA for every usable 16S record.
     tmp_query = Path(str(args.output) + '.query.fna')
     tmp_blast = Path(str(args.output) + '.blast.tsv')
     query_records = []
-    for genome, rec in ssu.items():
-        if rec['seq'] and rec['len'] >= args.min_length:
-            query_records.append((genome, rec['seq']))
+    for records in ssu.values():
+        for rec in records:
+            if rec['seq'] and rec['len'] >= args.min_length:
+                query_records.append((rec['query_id'], rec['seq']))
     if not query_records:
         log_error(f"No 16S >= {args.min_length} bp found; nothing to classify")
         sys.exit(1)
@@ -166,43 +180,55 @@ def run(args):
     rows: List[Dict] = []
     n_disagree = 0
     for genome in sorted(ssu):
-        rec = ssu[genome]
+        records = ssu[genome]
         g_taxon = _match_genome_taxon(genome, genome_taxa)
-        if not rec['seq'] or rec['len'] < args.min_length:
-            note = 'no_16s' if not rec['seq'] else f"partial_16s(<{args.min_length}bp)"
-            rows.append({'genome': genome, 'has_16s': bool(rec['seq']),
-                         'ssu_len': rec['len'], 'ssu_pident': 'NA',
-                         'ssu_taxon': 'NA', 'genome_taxon': g_taxon or 'NA',
-                         'agree': 'NA', 'note': note})
-            continue
-        hit = best.get(genome)
-        if hit is None:
-            rows.append({'genome': genome, 'has_16s': True, 'ssu_len': rec['len'],
+        if not records:
+            rows.append({'genome': genome, 'has_16s': False,
+                         'ssu_id': 'NA', 'ssu_type': 'NA', 'ssu_len': 0,
                          'ssu_pident': 'NA', 'ssu_taxon': 'NA',
                          'genome_taxon': g_taxon or 'NA', 'agree': 'NA',
-                         'note': 'no_blast_hit'})
+                         'note': 'no_16s'})
             continue
-        ssu_taxon = ssu_taxon_at_rank(hit['stitle'], args.rank, args.ssu_taxonomy)
-        agree = taxa_agree(ssu_taxon, g_taxon)
-        if agree is False:
-            n_disagree += 1
-        note = ''
-        if hit['pident'] is not None and hit['pident'] < 90:
-            note = 'low_identity'
-        rows.append({
-            'genome': genome, 'has_16s': True, 'ssu_len': rec['len'],
-            'ssu_pident': (f"{hit['pident']:.1f}" if hit['pident'] is not None else 'NA'),
-            'ssu_taxon': ssu_taxon or 'NA',
-            'genome_taxon': g_taxon or 'NA',
-            'agree': ('NA' if agree is None else agree),
-            'note': note,
-        })
+        for rec in records:
+            if rec['len'] < args.min_length:
+                rows.append({'genome': genome, 'has_16s': True,
+                             'ssu_id': rec['header'], 'ssu_type': rec['type'],
+                             'ssu_len': rec['len'], 'ssu_pident': 'NA',
+                             'ssu_taxon': 'NA', 'genome_taxon': g_taxon or 'NA',
+                             'agree': 'NA',
+                             'note': f"partial_16s(<{args.min_length}bp)"})
+                continue
+            hit = best.get(rec['query_id'])
+            if hit is None:
+                rows.append({'genome': genome, 'has_16s': True,
+                             'ssu_id': rec['header'], 'ssu_type': rec['type'],
+                             'ssu_len': rec['len'], 'ssu_pident': 'NA',
+                             'ssu_taxon': 'NA', 'genome_taxon': g_taxon or 'NA',
+                             'agree': 'NA', 'note': 'no_blast_hit'})
+                continue
+            ssu_taxon = ssu_taxon_at_rank(hit['stitle'], args.rank, args.ssu_taxonomy)
+            agree = taxa_agree(ssu_taxon, g_taxon)
+            if agree is False:
+                n_disagree += 1
+            note = ''
+            if hit['pident'] is not None and hit['pident'] < 90:
+                note = 'low_identity'
+            rows.append({
+                'genome': genome, 'has_16s': True,
+                'ssu_id': rec['header'], 'ssu_type': rec['type'],
+                'ssu_len': rec['len'],
+                'ssu_pident': (f"{hit['pident']:.1f}" if hit['pident'] is not None else 'NA'),
+                'ssu_taxon': ssu_taxon or 'NA',
+                'genome_taxon': g_taxon or 'NA',
+                'agree': ('NA' if agree is None else agree),
+                'note': note,
+            })
 
     with open(args.output, 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=OUT_FIELDS, delimiter='\t')
         w.writeheader()
         w.writerows(rows)
-    log_info(f"\nWritten: {args.output} ({len(rows):,} genomes)")
+    log_info(f"\nWritten: {args.output} ({len(rows):,} 16S rows)")
 
     if not args.keep_tmp:
         tmp_query.unlink(missing_ok=True)
@@ -211,16 +237,17 @@ def run(args):
     print_section("SSU TAXONOMY SUMMARY")
     n_classified = sum(1 for r in rows if r['ssu_taxon'] != 'NA')
     n_agree = sum(1 for r in rows if r['agree'] is True)
-    print(f"  Genomes:                 {len(rows):>6,}")
-    print(f"  With classified 16S:     {n_classified:>6,}")
-    print(f"  16S agrees with genome:  {n_agree:>6,}")
-    print(f"  16S DISAGREES (flagged): {n_disagree:>6,}")
+    print(f"  Genomes:                      {len(ssu):>6,}")
+    print(f"  16S records:                  {len(rows):>6,}")
+    print(f"  Classified 16S records:       {n_classified:>6,}")
+    print(f"  16S records agree with genome: {n_agree:>6,}")
+    print(f"  16S DISAGREES (flagged):      {n_disagree:>6,}")
     if n_disagree:
         print_section("DISAGREEMENTS (16S taxon vs genome taxon)")
         for r in rows:
             if r['agree'] is False:
-                print(f"  {r['genome']}: 16S={r['ssu_taxon']} vs genome={r['genome_taxon']} "
-                      f"(pident {r['ssu_pident']})")
+                print(f"  {r['genome']} {r['ssu_id']}: 16S={r['ssu_taxon']} "
+                      f"vs genome={r['genome_taxon']} (pident {r['ssu_pident']})")
 
     log_info("\nDone.")
 
