@@ -7,7 +7,7 @@ is, not re-apply safe_filename (which would double-hash and miss every file).
 
 from pathlib import Path
 
-from mamisa.commands.process_large_contigs import (
+from echidna.commands.process_large_contigs import (
     safe_filename,
     extract_hq_genomes,
     create_updated_assembly,

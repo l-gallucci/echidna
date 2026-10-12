@@ -1,6 +1,6 @@
-# MaMISA Snakemake workflow
+# Echidna Snakemake workflow
 
-Runs the MAG quality-control tail of MaMISA with **one conda env per rule**, so
+Runs the MAG quality-control tail of Echidna with **one conda env per rule**, so
 CheckM2, GTDB-Tk, GUNC and the rRNA/tRNA tools (which pin conflicting
 dependencies) never share an env. Snakemake builds each env automatically on
 first run.
@@ -14,11 +14,11 @@ conda install -c conda-forge -c bioconda snakemake-minimal
 
 ## Configure
 
-The quick way — let MaMISA do the edits:
+The quick way — let Echidna do the edits:
 
 ```bash
-mamisa setup-workflow --genomes-dir bins/ --genome-ext fa --threads 40 --install
-mamisa fetch-databases --gtdbtk-data /data/gtdbtk_r220 \
+echidna setup-workflow --genomes-dir bins/ --genome-ext fa --threads 40 --install
+echidna fetch-databases --gtdbtk-data /data/gtdbtk_r220 \
                        --gunc-db /data/gunc/gunc_db_progenomes2.1.dmnd   # or --download
 ```
 
@@ -29,8 +29,8 @@ config, or downloads missing ones with each tool's own downloader.
 
 Or edit by hand: set `genomes_dir`, `genome_ext`, the database paths
 (`gtdbtk_data`, `gunc_db`), `threads`, `sample_regex` / `tax_level` in
-`config.yaml`, and in each `envs/*.yaml` replace `- mamisa` with
-`-e /absolute/path/to/this/repo` until MaMISA is on PyPI.
+`config.yaml`, and in each `envs/*.yaml` replace `- echidna` with
+`-e /absolute/path/to/this/repo` until Echidna is on PyPI.
 
 ## Run
 

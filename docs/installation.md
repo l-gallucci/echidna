@@ -1,16 +1,16 @@
 # Installation
 
-MaMISA itself is pure Python with no external dependencies (Python >= 3.8), so it
+Echidna itself is pure Python with no external dependencies (Python >= 3.8), so it
 installs anywhere in seconds:
 
 ```bash
-git clone https://github.com/l-gallucci/mamisa.git
-cd mamisa
+git clone https://github.com/l-gallucci/echidna.git
+cd echidna
 pip install -e .
 
 # Verify
-mamisa --version
-mamisa --help
+echidna --version
+echidna --help
 ```
 
 That is enough to run the dependency-free commands (`organize-mags`,
@@ -19,36 +19,36 @@ call external tools (see below).
 
 ## How the environments fit together
 
-The key fact: MaMISA is tiny and has no dependencies, but the tools it drives
+The key fact: Echidna is tiny and has no dependencies, but the tools it drives
 (CheckM2, GTDB-Tk, GUNC, anvi'o) pin conflicting versions and cannot live in one
 conda env. So the layout is:
 
 - one conda env per heavy tool (unavoidable, standard in metagenomics), and
-- MaMISA installed into each env you run from (a 1-second `pip install`, since it
-  has no dependencies). The wrapper `mamisa run-gunc` must run inside the env that
-  has `gunc`, so `mamisa` has to be importable there too.
+- Echidna installed into each env you run from (a 1-second `pip install`, since it
+  has no dependencies). The wrapper `echidna run-gunc` must run inside the env that
+  has `gunc`, so `echidna` has to be importable there too.
 
-| Conda env | Contains | MaMISA commands that run in it |
+| Conda env | Contains | Echidna commands that run in it |
 |---|---|---|
-| `mamisa` (light) | MaMISA + samtools, BLAST+, bedtools, Kraken2, Kaiju, Meryl | `organize-mags`, `check-chimeras`, `classify-clipping`, `check-read-chimeras`, `check-zero-coverage`, `process-large-contigs`, and the `setup-workflow` / `fetch-databases` / `check-envs` helpers |
-| `checkm2` | CheckM2 (+ MaMISA) | `run-checkm2` |
-| `gtdbtk` | GTDB-Tk (+ MaMISA) | `run-gtdbtk` |
-| `gunc` | GUNC + DIAMOND + Prodigal (+ MaMISA) | `run-gunc` |
-| `mimag` | barrnap + tRNAscan-SE (+ MaMISA) | `run-mimag-rna` |
-| `anvio-9` | anvi'o (+ MaMISA) | `run-anvi-misassemblies` (produces the `*-clipping.txt` inputs) |
-| `mmseqs2` | MMseqs2 (+ MaMISA) | `run-mmseqs-contigs` (produces the per-contig taxonomy for `classify-contigs`) |
+| `echidna` (light) | Echidna + samtools, BLAST+, bedtools, Kraken2, Kaiju, Meryl | `organize-mags`, `check-chimeras`, `classify-clipping`, `check-read-chimeras`, `check-zero-coverage`, `process-large-contigs`, and the `setup-workflow` / `fetch-databases` / `check-envs` helpers |
+| `checkm2` | CheckM2 (+ Echidna) | `run-checkm2` |
+| `gtdbtk` | GTDB-Tk (+ Echidna) | `run-gtdbtk` |
+| `gunc` | GUNC + DIAMOND + Prodigal (+ Echidna) | `run-gunc` |
+| `mimag` | barrnap + tRNAscan-SE (+ Echidna) | `run-mimag-rna` |
+| `anvio-9` | anvi'o (+ Echidna) | `run-anvi-misassemblies` (produces the `*-clipping.txt` inputs) |
+| `mmseqs2` | MMseqs2 (+ Echidna) | `run-mmseqs-contigs` (produces the per-contig taxonomy for `classify-contigs`) |
 
 Do I need all of them? Only the ones whose commands you use. Just want
-`organize-mags` / `check-chimeras`? The `mamisa` env alone is enough. Want the full
+`organize-mags` / `check-chimeras`? The `echidna` env alone is enough. Want the full
 assembly-to-taxonomy pipeline? Create all of them.
 
 Snakemake is optional: it is only an orchestrator on top of these envs (see
-[pipeline.md](pipeline.md)). You never put MaMISA in a Snakemake env; Snakemake
+[pipeline.md](pipeline.md)). You never put Echidna in a Snakemake env; Snakemake
 just calls the envs above.
 
 ## External tools (required per command)
 
-MaMISA's wrappers shell out to standard bioinformatics tools. A tool only needs
+Echidna's wrappers shell out to standard bioinformatics tools. A tool only needs
 to be on `PATH` for the command that uses it.
 
 | Command | External tool(s) |
@@ -67,7 +67,7 @@ to be on `PATH` for the command that uses it.
 | `filter-misassemblies` | anvi'o (upstream misassembly detection) |
 | `organize-mags` (was `filter-checkm2`) | (none; consumes CheckM2 + GTDB-Tk output) |
 | `run-anvi-misassemblies` | anvi'o (`anvi-script-find-misassemblies`) |
-| `misassembly-wf` | orchestrator; needs the anvio-9 + checkm2 envs (and mamisa) |
+| `misassembly-wf` | orchestrator; needs the anvio-9 + checkm2 envs (and echidna) |
 | `mag-quality-wf` | orchestrator; needs the checkm2 + gtdbtk + gunc + mimag envs |
 
 ## Create the environments
@@ -75,15 +75,15 @@ to be on `PATH` for the command that uses it.
 Create only the ones you need (see the table above). `mamba` or `conda` both work.
 
 ```bash
-# 1) Light env: MaMISA + the small CLI tools. Needed for most commands.
-mamba create -n mamisa -c conda-forge -c bioconda \
+# 1) Light env: Echidna + the small CLI tools. Needed for most commands.
+mamba create -n echidna -c conda-forge -c bioconda \
     python=3.10 samtools blast bedtools kraken2 kaiju meryl
-conda activate mamisa
-pip install -e .                     # installs MaMISA (clone this repo first)
+conda activate echidna
+pip install -e .                     # installs Echidna (clone this repo first)
 
 # 2) CheckM2
 mamba create -n checkm2 -c conda-forge -c bioconda checkm2
-conda run -n checkm2 pip install -e .    # add MaMISA (zero-dep, instant)
+conda run -n checkm2 pip install -e .    # add Echidna (zero-dep, instant)
 
 # 3) GTDB-Tk
 mamba create -n gtdbtk -c conda-forge -c bioconda gtdbtk
@@ -99,7 +99,7 @@ conda run -n gunc pip install -e .
 mamba create -n mimag -c conda-forge -c bioconda barrnap trnascan-se
 conda run -n mimag pip install -e .
 
-# 6) anvi'o - produces *-clipping.txt. Add MaMISA so `run-anvi-misassemblies`
+# 6) anvi'o - produces *-clipping.txt. Add Echidna so `run-anvi-misassemblies`
 #    and `misassembly-wf` can drive it inside this env.
 mamba create -n anvio-9 -c conda-forge -c bioconda anvio=9
 conda run -n anvio-9 pip install -e .
@@ -119,14 +119,14 @@ conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb /tmp/mmseqs_tmp
 Check everything is compatible at any time:
 
 ```bash
-mamisa check-envs --mamisa-env mamisa --checkm2-env checkm2 \
+echidna check-envs --echidna-env echidna --checkm2-env checkm2 \
                   --gtdbtk-env gtdbtk --gunc-env gunc --mimag-env mimag
 ```
 
 Verified (2026-10): GUNC 1.1.1's Bioconda recipe declares `pandas>=2.0.0` with no
 upper bound, so an unpinned install grabs pandas 3.x and Python 3.14+, which crash
 GUNC. The pinned recipe above resolves to python 3.10, pandas 2.3, numpy 1.26,
-diamond 2.1.24, prodigal 2.6.3 and runs cleanly. `mamisa run-gunc` also runs an
+diamond 2.1.24, prodigal 2.6.3 and runs cleanly. `echidna run-gunc` also runs an
 env-health check and refuses to launch a broken GUNC.
 
 ## Databases
@@ -135,21 +135,21 @@ The path KIND is checked per tool: GTDB-Tk = a directory, GUNC and CheckM2 = a
 `.dmnd` file.
 
 ```bash
-# already have them? just point MaMISA at them (validated, written to config)
-mamisa fetch-databases \
+# already have them? just point Echidna at them (validated, written to config)
+echidna fetch-databases \
     --gtdbtk-data /data/gtdbtk_r220 \                      # DIRECTORY
     --gunc-db     /data/gunc/gunc_db_progenomes2.1.dmnd \  # FILE
     --checkm2-db  /data/checkm2/uniref100.KO.1.dmnd        # FILE
 
 # or download the missing ones (each runs inside its tool's env)
-mamisa fetch-databases --download --db-dir /data/mamisa_dbs
+echidna fetch-databases --download --db-dir /data/echidna_dbs
 
 # GUNC (>=1.1.1) offers several reference DBs, fetched from Zenodo:
 #   progenomes_2.1 (default, isolate-biased), progenomes_3,
 #   gtdb_95 (old), gtdb_214 (GTDB r214).
 # For environmental MAGs prefer gtdb_214 (broader taxa, fewer false chimeric
 # calls on novel lineages, consistent with GTDB-Tk downstream):
-mamisa fetch-databases --download --tools gunc --gunc-db-source gtdb_214
+echidna fetch-databases --download --tools gunc --gunc-db-source gtdb_214
 ```
 
 ## Running the tests

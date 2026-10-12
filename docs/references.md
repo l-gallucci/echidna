@@ -1,11 +1,11 @@
 # References
 
-MaMISA is an orchestrator: it drives established tools and signals. Please cite
+Echidna is an orchestrator: it drives established tools and signals. Please cite
 the underlying methods you actually used.
 
 ## Misassembly detection (anvi'o)
 
-The misassembly branch of MaMISA (`classify-clipping`, `filter-misassemblies`,
+The misassembly branch of Echidna (`classify-clipping`, `filter-misassemblies`,
 `process-large-contigs`, `check-zero-coverage`) consumes the output of
 `anvi-script-find-misassemblies`, which reports soft-clipping and zero-coverage
 positions from long reads mapped back to their own assembly. The `chimeric_join`
@@ -34,7 +34,7 @@ requires 5S/16S/23S rRNA and tRNAs for at least 18 amino acids, which
   (MISAG) and a metagenome-assembled genome (MIMAG) of bacteria and archaea.*
   Nature Biotechnology 35:725-731. doi:10.1038/nbt.3893
 
-## Tools driven by MaMISA
+## Tools driven by Echidna
 
 - CheckM2: Chklovski A. et al. (2023). Nature Methods 20:1203-1212.
   doi:10.1038/s41592-023-01940-w

@@ -1,0 +1,18 @@
+# Light env: Echidna + dependency-free CLI tools.
+# Used by the pure-Python Echidna steps (organize-mags, check-chimeras) and any
+# BAM/BLAST/k-mer command (samtools, blast, bedtools, kraken2, meryl).
+name: echidna
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - samtools
+  - blast
+  - bedtools
+  - kraken2
+  - meryl
+  - pip
+  - pip:
+      # Until published to PyPI, replace `echidna` with: -e /absolute/path/to/echidna
+      - echidna

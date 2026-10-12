@@ -1,4 +1,4 @@
-# MaMISA Snakemake workflow — configuration
+# Echidna Snakemake workflow — configuration
 #
 # Edit the paths below, then run from the repo root:
 #   snakemake --use-conda --cores 20 -s workflow/Snakefile --configfile workflow/config.yaml
@@ -43,9 +43,9 @@ gtdbtk_skip_existing: true
 #                            env per rule from envs/*.yaml (default).
 #   use_named_envs: true   → run plain `snakemake` (NO --use-conda); each rule is
 #                            wrapped in `conda run -n <env_*>` using YOUR envs.
-# `mamisa setup-workflow --gunc-env ... --checkm2-env ...` sets these for you.
+# `echidna setup-workflow --gunc-env ... --checkm2-env ...` sets these for you.
 use_named_envs: false
-env_mamisa: ""     # light CLI tools + MaMISA (organize-mags, check-chimeras)
+env_echidna: ""     # light CLI tools + Echidna (organize-mags, check-chimeras)
 env_checkm2: ""    # CheckM2
 env_gtdbtk: ""     # GTDB-Tk
 env_gunc: ""       # GUNC

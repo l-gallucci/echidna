@@ -1,19 +1,19 @@
-# MaMISA - Manage Misassemblies
+# Echidna - metagenomic assembly, MAG integrity and chimera screening
 
 A dependency-free Python toolkit for metagenomic assembly quality control: from a
 raw assembly to quality-filtered, taxonomically classified genomes.
 
-MaMISA itself is pure Python (no dependencies) and installs in seconds. It
+Echidna itself is pure Python (no dependencies) and installs in seconds. It
 orchestrates standard tools (anvi'o, CheckM2, GTDB-Tk, GUNC, barrnap,
 tRNAscan-SE, Kraken2, samtools, BLAST+), each in its own conda env.
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/l-gallucci/mamisa.git
-cd mamisa
+git clone https://github.com/l-gallucci/echidna.git
+cd echidna
 pip install -e .
-mamisa --help
+echidna --help
 ```
 
 That covers the dependency-free commands. Heavy commands additionally call
@@ -55,7 +55,7 @@ Setup and environment helpers:
 |---|---|
 | `setup-workflow` | Configure the Snakemake workflow (env yamls + config), optionally build envs |
 | `fetch-databases` | Register existing databases, or download missing ones |
-| `check-envs` | Report tool versions per conda env + MaMISA compatibility |
+| `check-envs` | Report tool versions per conda env + Echidna compatibility |
 
 Every subcommand has `-h/--help`.
 
@@ -76,7 +76,7 @@ Every subcommand has `-h/--help`.
 
 ## Citation
 
-If you use MaMISA, please also cite the underlying methods you used - see
+If you use Echidna, please also cite the underlying methods you used - see
 [docs/references.md](docs/references.md). In particular, misassembly detection is
 built on anvi'o `anvi-script-find-misassemblies` and the signals described in
 Trigodet et al. 2025.
@@ -88,4 +88,4 @@ MIT License - see LICENSE.
 ## Contributing
 
 Fork, branch, open a pull request. Issues and feature requests:
-https://github.com/l-gallucci/mamisa/issues
+https://github.com/l-gallucci/echidna/issues

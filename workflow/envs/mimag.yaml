@@ -1,6 +1,6 @@
 # rRNA (barrnap) + tRNA (tRNAscan-SE) for the MIMAG high-quality criterion.
-# Small, light env; MaMISA is dependency-free and pip-installed alongside.
-name: mamisa-mimag
+# Small, light env; Echidna is dependency-free and pip-installed alongside.
+name: echidna-mimag
 channels:
   - conda-forge
   - bioconda
@@ -9,5 +9,5 @@ dependencies:
   - trnascan-se
   - pip
   - pip:
-      # Until published to PyPI, replace `mamisa` with: -e /absolute/path/to/mamisa
-      - mamisa
+      # Until published to PyPI, replace `echidna` with: -e /absolute/path/to/echidna
+      - echidna

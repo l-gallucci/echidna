@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# MaMISA Complete Workflow Example
+# Echidna Complete Workflow Example
 # This script demonstrates a full pipeline from assembly QC to classified genomes
 #
 
@@ -9,11 +9,11 @@ set -euo pipefail
 # Configuration
 ASSEMBLY="data/assembly.fa"
 MAPPING_BAM="data/mapping.bam"
-WORKDIR="mamisa_workflow"
+WORKDIR="echidna_workflow"
 THREADS=40
 
 echo "======================================================================"
-echo "  MaMISA Complete Workflow Example"
+echo "  Echidna Complete Workflow Example"
 echo "======================================================================"
 
 # Create working directory
@@ -84,7 +84,7 @@ else
 fi
 
 #------------------------------------------------------------------------------
-# STEP 4: Filter genomes by quality with MaMISA
+# STEP 4: Filter genomes by quality with Echidna
 #------------------------------------------------------------------------------
 echo ""
 echo "STEP 4: Filtering genomes by quality..."
@@ -92,7 +92,7 @@ echo "----------------------------------------------------------------------"
 
 mkdir -p 04_filtered_genomes
 
-mamisa filter-checkm2 \
+echidna filter-checkm2 \
     --checkm2-root 03_checkm2/ \
     --genomes-dir 02_initial_bins/ \
     --output 04_filtered_genomes/ \
@@ -116,7 +116,7 @@ echo "----------------------------------------------------------------------"
 
 mkdir -p 05_assembly_filtered
 
-mamisa remove-hq-contigs \
+echidna remove-hq-contigs \
     --assembly "../$ASSEMBLY" \
     --hq-dir 04_filtered_genomes/Selected/HQ/ \
     --output 05_assembly_filtered/assembly_no_hq.fa \
@@ -137,7 +137,7 @@ mkdir -p 06_assembly_clean
 
 # First, do a dry-run to see statistics
 echo "Running dry-run to preview changes..."
-mamisa filter-misassemblies \
+echidna filter-misassemblies \
     --assembly 05_assembly_filtered/assembly_no_hq.fa \
     --misassemblies 01_misassemblies/ \
     --dry-run \
@@ -146,7 +146,7 @@ mamisa filter-misassemblies \
 echo ""
 echo "Proceeding with actual filtering..."
 
-mamisa filter-misassemblies \
+echidna filter-misassemblies \
     --assembly 05_assembly_filtered/assembly_no_hq.fa \
     --misassemblies 01_misassemblies/ \
     --output 06_assembly_clean/assembly_clean.fa \
@@ -180,7 +180,7 @@ mkdir -p 08_taxonomy
 
 # Classify HQ and MQ genomes
 if command -v gtdbtk &> /dev/null; then
-    mamisa run-gtdbtk \
+    echidna run-gtdbtk \
         --selected-dir 04_filtered_genomes/Selected/ \
         --output 08_taxonomy/ \
         --extension fa \
@@ -205,7 +205,7 @@ REPORT="workflow_summary.txt"
 
 cat > "$REPORT" <<EOF
 ====================================================================
-  MaMISA Workflow Summary
+  Echidna Workflow Summary
 ====================================================================
 
 Workflow completed: $(date)

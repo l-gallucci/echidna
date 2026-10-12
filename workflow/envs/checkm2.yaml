@@ -1,4 +1,4 @@
-name: mamisa-checkm2
+name: echidna-checkm2
 channels:
   - conda-forge
   - bioconda
@@ -6,5 +6,5 @@ dependencies:
   - checkm2
   - pip
   - pip:
-      # Until published to PyPI, replace `mamisa` with: -e /absolute/path/to/mamisa
-      - mamisa
+      # Until published to PyPI, replace `echidna` with: -e /absolute/path/to/echidna
+      - echidna

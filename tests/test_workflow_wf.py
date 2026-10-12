@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from mamisa.utils.workflow_run import Step, filter_plan, wrap_env
-from mamisa.commands import misassembly_wf, mag_quality_wf, run_anvi_misassemblies
+from echidna.utils.workflow_run import Step, filter_plan, wrap_env
+from echidna.commands import misassembly_wf, mag_quality_wf, run_anvi_misassemblies
 
 
 # ---- shared helpers -------------------------------------------------------
@@ -18,9 +18,9 @@ def _steps():
 
 
 def test_wrap_env():
-    assert wrap_env(None, ['mamisa', 'x']) == ['mamisa', 'x']
-    assert wrap_env('gunc', ['mamisa', 'x']) == \
-        ['conda', 'run', '--no-capture-output', '-n', 'gunc', 'mamisa', 'x']
+    assert wrap_env(None, ['echidna', 'x']) == ['echidna', 'x']
+    assert wrap_env('gunc', ['echidna', 'x']) == \
+        ['conda', 'run', '--no-capture-output', '-n', 'gunc', 'echidna', 'x']
 
 
 def test_filter_plan_from_and_skip():
@@ -76,7 +76,7 @@ def test_misassembly_anvi_runs_in_anvio_env_via_wrapper():
     steps = misassembly_wf.build_plan(_misasm_args())
     anvi = steps[0]
     assert anvi.env == 'anvio-9'
-    assert anvi.cmd[:2] == ['mamisa', 'run-anvi-misassemblies']
+    assert anvi.cmd[:2] == ['echidna', 'run-anvi-misassemblies']
 
 
 # ---- mag-quality-wf -------------------------------------------------------
@@ -84,7 +84,7 @@ def test_misassembly_anvi_runs_in_anvio_env_via_wrapper():
 def _mag_args(**over):
     base = dict(output_dir=Path('MOUT'), genome_ext='fa', skip_mimag=False,
                 bins_dir=Path('bins'), threads=40, checkm2_db=None,
-                checkm2_env='checkm2', mamisa_env=None, tiers='HQ,MQ',
+                checkm2_env='checkm2', echidna_env=None, tiers='HQ,MQ',
                 gtdbtk_data=None, gtdbtk_env='gtdbtk', gunc_db=None,
                 gunc_env='gunc', split_by_domain=False, mimag_env='mimag')
     base.update(over)

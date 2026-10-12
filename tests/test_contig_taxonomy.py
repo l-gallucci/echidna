@@ -1,4 +1,4 @@
-"""Tests for mamisa.utils.contig_taxonomy and the classify-contigs command.
+"""Tests for echidna.utils.contig_taxonomy and the classify-contigs command.
 All pure-function tests; no classifier is executed."""
 
 import argparse
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mamisa.utils.contig_taxonomy import (
+from echidna.utils.contig_taxonomy import (
     parse_nodes_dmp,
     parse_mmseqs_taxonomy,
     parse_mmseqs_lineage,
@@ -16,7 +16,7 @@ from mamisa.utils.contig_taxonomy import (
     summarize_bin_taxa,
     summarize_bin_lineage,
 )
-from mamisa.commands import classify_contigs, run_mmseqs_contigs
+from echidna.commands import classify_contigs, run_mmseqs_contigs
 
 
 # A tiny taxonomy tree:
@@ -118,7 +118,7 @@ def test_summarize_bin_taxa_unresolved_not_counted(nodes):
 def test_summarize_with_names(tmp_path, nodes):
     names_file = tmp_path / "names.dmp"
     names_file.write_text(NAMES_DMP)
-    from mamisa.utils.read_taxonomy import parse_names_dmp
+    from echidna.utils.read_taxonomy import parse_names_dmp
     names = parse_names_dmp(names_file)
     out = summarize_bin_taxa({'b': ['c1', 'c2']}, {'c1': 60, 'c2': 61},
                              'order', nodes, names)

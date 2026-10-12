@@ -4,8 +4,8 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/l-gallucci/mamisa.git
-cd mamisa
+git clone https://github.com/l-gallucci/echidna.git
+cd echidna
 
 # Install in development mode
 pip install -e .
@@ -17,8 +17,8 @@ pip install .
 ## Verify Installation
 
 ```bash
-mamisa --version
-mamisa --help
+echidna --version
+echidna --help
 ```
 
 ## Directory Structure
@@ -26,8 +26,8 @@ mamisa --help
 After cloning, your directory should look like:
 
 ```
-mamisa/
-├── mamisa/
+echidna/
+├── echidna/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── commands/
@@ -79,12 +79,12 @@ export GTDBTK_DATA_PATH=/path/to/gtdbtk_data
 
 ## Development Installation
 
-If you want to contribute to MaMISA:
+If you want to contribute to Echidna:
 
 ```bash
 # Clone repository
-git clone https://github.com/l-gallucci/mamisa.git
-cd mamisa
+git clone https://github.com/l-gallucci/echidna.git
+cd echidna
 
 # Create virtual environment
 python3 -m venv venv
@@ -101,17 +101,17 @@ pytest
 
 ### Command not found after installation
 
-If `mamisa` is not found after installation:
+If `echidna` is not found after installation:
 
 ```bash
 # Check if it's in your PATH
-which mamisa
+which echidna
 
 # If not, find where pip installed it
-pip show mamisa
+pip show echidna
 
 # Add to PATH or use full path
-export PATH="$PATH:/path/to/mamisa/bin"
+export PATH="$PATH:/path/to/echidna/bin"
 ```
 
 ### Permission denied
@@ -140,7 +140,7 @@ python3.9 -m pip install .
 ## Uninstallation
 
 ```bash
-pip uninstall mamisa
+pip uninstall echidna
 ```
 
 ## Platform-Specific Notes
@@ -155,14 +155,14 @@ conda install -c conda-forge python=3.9
 ```
 
 ### Windows
-MaMISA should work on Windows, but external tools (anvi'o, CheckM2, GTDB-Tk) are best run in WSL2 or Docker.
+Echidna should work on Windows, but external tools (anvi'o, CheckM2, GTDB-Tk) are best run in WSL2 or Docker.
 
 ## Docker (Coming Soon)
 
 ```bash
 # Build Docker image
-docker build -t mamisa:latest .
+docker build -t echidna:latest .
 
 # Run
-docker run -v $(pwd):/data mamisa filter-misassemblies --help
+docker run -v $(pwd):/data echidna filter-misassemblies --help
 ```

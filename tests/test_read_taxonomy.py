@@ -1,6 +1,6 @@
-"""Tests for the Kaiju parsers in mamisa.utils.read_taxonomy."""
+"""Tests for the Kaiju parsers in echidna.utils.read_taxonomy."""
 
-from mamisa.utils.read_taxonomy import (
+from echidna.utils.read_taxonomy import (
     parse_kaiju_output,
     parse_names_dmp,
     taxon_label,

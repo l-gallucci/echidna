@@ -1,4 +1,4 @@
-name: mamisa-gtdbtk
+name: echidna-gtdbtk
 channels:
   - conda-forge
   - bioconda
@@ -6,5 +6,5 @@ dependencies:
   - gtdbtk
   - pip
   - pip:
-      # Until published to PyPI, replace `mamisa` with: -e /absolute/path/to/mamisa
-      - mamisa
+      # Until published to PyPI, replace `echidna` with: -e /absolute/path/to/echidna
+      - echidna

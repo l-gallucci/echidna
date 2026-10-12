@@ -1,7 +1,7 @@
 """Tests for setup-workflow / check-envs pure helpers."""
 
-from mamisa.commands.setup_workflow import set_yaml_scalar
-from mamisa.commands.check_envs import _parse_ver, check_env
+from echidna.commands.setup_workflow import set_yaml_scalar
+from echidna.commands.check_envs import _parse_ver, check_env
 
 
 def test_set_yaml_scalar_replaces_existing():
@@ -37,7 +37,7 @@ def test_parse_ver():
 
 def test_check_env_unreachable(monkeypatch):
     # when conda run fails, env check returns not ok without raising
-    import mamisa.commands.check_envs as ce
+    import echidna.commands.check_envs as ce
     monkeypatch.setattr(ce, "_conda_run", lambda env, cmd, timeout=120: (1, "no env"))
     result = ce.check_env("ghost", "gunc", repo="/repo")
     assert result["ok"] is False

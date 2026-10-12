@@ -1,9 +1,9 @@
-"""Tests for mamisa.utils.fasta."""
+"""Tests for echidna.utils.fasta."""
 
 import gzip
 import pytest
 
-from mamisa.utils.fasta import extract_contig_id, read_fasta_streaming
+from echidna.utils.fasta import extract_contig_id, read_fasta_streaming
 
 
 @pytest.mark.parametrize("name,expected", [

@@ -16,17 +16,17 @@ Both ways use the same conda envs (see [installation.md](installation.md)).
 Call each command in its env:
 
 ```bash
-conda run -n checkm2 mamisa run-checkm2 --genome-dir bins/ -o results/checkm2 --threads 40
+conda run -n checkm2 echidna run-checkm2 --genome-dir bins/ -o results/checkm2 --threads 40
 conda run -n gtdbtk  env GTDBTK_DATA_PATH=/data/gtdbtk_r220 \
-                     mamisa run-gtdbtk  --genome-dir bins/ -o results/gtdbtk --cpus 40
-conda run -n gunc    mamisa run-gunc    --genome-dir bins/ -o results/gunc \
+                     echidna run-gtdbtk  --genome-dir bins/ -o results/gtdbtk --cpus 40
+conda run -n gunc    echidna run-gunc    --genome-dir bins/ -o results/gunc \
                      --file-suffix .fa --threads 40 --db-file /data/gunc/gunc_db_progenomes2.1.dmnd \
                      --contig-taxonomy-output   # enables check-chimeras per-contig multi-clade signal
-conda run -n mimag   mamisa run-mimag-rna --genome-dir bins/ -o results/mimag_rna --threads 40  # optional
-conda run -n mamisa  mamisa organize-mags --checkm2-root results/checkm2 --genomes-dir bins/ \
+conda run -n mimag   echidna run-mimag-rna --genome-dir bins/ -o results/mimag_rna --threads 40  # optional
+conda run -n echidna  echidna organize-mags --checkm2-root results/checkm2 --genomes-dir bins/ \
                      --gtdbtk-dir results/gtdbtk -o results/filtered --rename --copy \
                      --mimag-rna-dir results/mimag_rna          # drop this flag to skip the rRNA/tRNA HQ gate
-conda run -n mamisa  mamisa check-chimeras --bins-dir bins/ --gunc-dir results/gunc \
+conda run -n echidna  echidna check-chimeras --bins-dir bins/ --gunc-dir results/gunc \
                      --checkm2-report results/checkm2/quality_report.tsv -o results/chimera_report.tsv
 ```
 
@@ -37,11 +37,11 @@ HQ is completeness/contamination only.
 
 For a mixed bacteria + archaea bin set, barrnap and tRNAscan-SE need the right
 kingdom per genome. Run it once with `--split-by-domain --gtdbtk-dir <taxonomy>`:
-MaMISA reads the GTDB-Tk per-domain summaries and applies `bac`/`arc` automatically
+Echidna reads the GTDB-Tk per-domain summaries and applies `bac`/`arc` automatically
 (no manual splitting of the bins):
 
 ```bash
-conda run -n mimag mamisa run-mimag-rna \
+conda run -n mimag echidna run-mimag-rna \
     --selected-dir results/filtered/Selected --tiers HQ \
     -o results/mimag_rna --threads 40 \
     --split-by-domain --gtdbtk-dir results/gtdbtk
@@ -55,15 +55,15 @@ One command runs the whole DAG. Configure once, then run:
 conda install -c conda-forge -c bioconda snakemake-minimal   # in base or its own env
 
 # tell the workflow which envs + databases to use (sanity-checks them)
-mamisa setup-workflow --genomes-dir bins/ --genome-ext fa --threads 40 \
-    --mamisa-env mamisa --checkm2-env checkm2 --gtdbtk-env gtdbtk --gunc-env gunc
+echidna setup-workflow --genomes-dir bins/ --genome-ext fa --threads 40 \
+    --echidna-env echidna --checkm2-env checkm2 --gtdbtk-env gtdbtk --gunc-env gunc
 
 # then run (named-env mode: Snakemake wraps each rule in `conda run -n`)
 snakemake --cores 40 -s workflow/Snakefile --configfile workflow/config.yaml
 ```
 
 Don't have the envs and want Snakemake to build them for you instead? Use
-`mamisa setup-workflow --genomes-dir bins/ --install` and run with
+`echidna setup-workflow --genomes-dir bins/ --install` and run with
 `snakemake --use-conda ...`. Details in
 [`../workflow/README.md`](../workflow/README.md). For clusters see
 [hpc.md](hpc.md).
@@ -123,7 +123,7 @@ regular contigs, runs CheckM2 on each large contig, classifies each as extract H
 keep for splitting, or low quality, and returns an updated assembly.
 
 ```bash
-mamisa process-large-contigs \
+echidna process-large-contigs \
     --assembly assembly.fa \
     --misassemblies misasm_dir/ \
     --output-dir 01_large_contigs/ \
@@ -155,7 +155,7 @@ taxonomy, builds a per-contig taxonomic profile, and flags contigs whose reads
 originate from more than one organism.
 
 ```bash
-mamisa check-read-chimeras \
+echidna check-read-chimeras \
     --bam mapping.bam \
     --kraken2-output kraken2_reads.txt \
     --kraken2-report kraken2_report.txt \
@@ -181,7 +181,7 @@ with `--contig-taxonomy-output`, bins whose contigs span two or more clades get
 the strongest signal.
 
 ```bash
-mamisa check-chimeras \
+echidna check-chimeras \
     --bins-dir 06_bins/ \
     --output 02_chimera/gc_chimera_report.tsv \
     --gtdbtk-dir 09_taxonomy/ \
@@ -201,7 +201,7 @@ Characterise each anvi'o-reported clipping position using BAM evidence so you ca
 prioritise which splits are biologically meaningful.
 
 ```bash
-mamisa classify-clipping \
+echidna classify-clipping \
     --bam mapping.bam \
     --misassemblies misassemblies/ \
     --taxonomy-windows 02_chimera/chimera_read_windows.tsv \
@@ -224,7 +224,7 @@ Classification labels:
 
 ```bash
 # Conservative: use all anvi'o-reported positions (--safe, the default)
-mamisa filter-misassemblies \
+echidna filter-misassemblies \
     --assembly 01_large_contigs/assembly_for_filtering.fa \
     --misassemblies misassemblies/ \
     --hq-genomes 01_large_contigs/HQ_extracted/ \
@@ -247,13 +247,13 @@ metabat2 -i 04_clean/assembly_clean.fa -a depth.txt -o 05_bins/bin -t 40
 ### Step 7 - Quality assessment with CheckM2
 
 ```bash
-conda run -n checkm2 mamisa run-checkm2 --genome-dir 05_bins/ -o 06_checkm2/ --threads 40
+conda run -n checkm2 echidna run-checkm2 --genome-dir 05_bins/ -o 06_checkm2/ --threads 40
 ```
 
 ### Step 8 - Organise genomes by quality
 
 ```bash
-mamisa organize-mags \
+echidna organize-mags \
     --checkm2-root 06_checkm2/ --genomes-dir 05_bins/ \
     --output 07_filtered/ --tiers HQ,MQ --symlink
 ```
@@ -273,14 +273,14 @@ MIMAG HQ also needs rRNA/tRNA (`--mimag-rna-dir`, see Option A).
 ### Step 9 - Taxonomic classification with GTDB-Tk
 
 ```bash
-conda run -n gtdbtk mamisa run-gtdbtk \
+conda run -n gtdbtk echidna run-gtdbtk \
     --selected-dir 07_filtered/Selected/ \
     --output 08_taxonomy/ --cpus 40 --tiers HQ,MQ
 ```
 
 ## Understanding misassembly detection
 
-MaMISA uses soft-clipping information from read mapping to detect misassemblies. A
+Echidna uses soft-clipping information from read mapping to detect misassemblies. A
 clipping position is a genomic location where reads are predominantly soft-clipped:
 strong evidence that two unrelated sequences were joined during assembly.
 

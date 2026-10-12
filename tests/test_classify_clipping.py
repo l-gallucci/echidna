@@ -1,6 +1,6 @@
-"""Tests for mamisa.commands.classify_clipping.classify_position."""
+"""Tests for echidna.commands.classify_clipping.classify_position."""
 
-from mamisa.commands.classify_clipping import classify_position
+from echidna.commands.classify_clipping import classify_position
 
 
 def _stats(**kw):

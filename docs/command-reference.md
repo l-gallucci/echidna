@@ -117,7 +117,7 @@ Two resolution modes, picked automatically:
   taxid is walked up the NCBI tree with `--nodes-dmp` (required here).
 
 Produce the input first, e.g. `kraken2 --db DB --output contigs.kraken2 all_contigs.fa`
-or `mamisa run-mmseqs-contigs ...` (the sequence-id column is the contig name).
+or `echidna run-mmseqs-contigs ...` (the sequence-id column is the contig name).
 
 ```
 Required:
@@ -156,7 +156,7 @@ Runs MMseqs2 taxonomy on the contigs of a set of bins and writes the per-contig
 TSV that `classify-contigs --mmseqs-output` consumes. MMseqs2 is the per-contig
 classifier MAGpurify2 uses: protein-level 2bLCA, sensitive on divergent/novel
 taxa, and its DB can be GTDB-derived so ranks match GTDB-Tk. Heavy dependency, so
-it lives in its own `mmseqs2` env: `conda run -n mmseqs2 mamisa run-mmseqs-contigs ...`.
+it lives in its own `mmseqs2` env: `conda run -n mmseqs2 echidna run-mmseqs-contigs ...`.
 
 Needs a prebuilt MMseqs2 taxonomy DB (`--db`), e.g.
 `conda run -n mmseqs2 mmseqs databases GTDB /data/mmseqs_gtdb tmp`. `--db` is the
@@ -348,7 +348,7 @@ Optional:
 
 GTDB-Tk version note (latest 2.7.2): since v2.5.0 GTDB-Tk screens with skani and no
 longer uses Mash, so `--mash_db` is gone. The old `--skip_ani_screen` was replaced
-by `--place_species` in v2.7.0. MaMISA parses both the old (`fastani_*`) and new
+by `--place_species` in v2.7.0. Echidna parses both the old (`fastani_*`) and new
 (`closest_genome_*`) summary column names, so reports from any recent GTDB-Tk
 version work.
 
@@ -416,7 +416,7 @@ names are given) sanity-checks them. `--install` builds every per-rule conda env
 
 ```
 Optional:
-  --repo PATH                 MaMISA checkout (default: auto-detected)
+  --repo PATH                 Echidna checkout (default: auto-detected)
   --workflow-dir PATH         Workflow dir (default: <repo>/workflow)
   --genomes-dir PATH          Input genomes directory (config)
   --genome-ext STR            Genome extension (config)
@@ -425,7 +425,7 @@ Optional:
   --gunc-db FILE              GUNC .dmnd FILE
   --checkm2-db FILE           CheckM2 .dmnd FILE
   --sample-regex RE / --tax-level LEVEL
-  --mamisa-env / --checkm2-env / --gtdbtk-env / --gunc-env / --mimag-env NAME
+  --echidna-env / --checkm2-env / --gtdbtk-env / --gunc-env / --mimag-env NAME
                               Use these existing envs (sets use_named_envs)
   --install                   Build per-rule conda envs (snakemake)
   --no-check                  Skip the env sanity check
@@ -456,18 +456,18 @@ Optional:
 
 ## check-envs
 
-Sanity-checks existing conda envs: reports each tool's version, whether MaMISA is
+Sanity-checks existing conda envs: reports each tool's version, whether Echidna is
 importable there, and (for GUNC) pandas/numpy/python compatibility. Prints the
 exact install/fix command for anything that fails.
 
 ```
 Optional (at least one):
-  --mamisa-env NAME           Env with the light CLI tools + MaMISA
+  --echidna-env NAME           Env with the light CLI tools + Echidna
   --checkm2-env NAME          Env with CheckM2
   --gtdbtk-env NAME           Env with GTDB-Tk
   --gunc-env NAME             Env with GUNC
   --mimag-env NAME            Env with barrnap + tRNAscan-SE
-  --repo PATH                 MaMISA checkout used in fix hints
+  --repo PATH                 Echidna checkout used in fix hints
 ```
 
 ## run-anvi-misassemblies
@@ -503,7 +503,7 @@ Required:
 
 Optional:
   --threads INT               Threads (default: 1)
-  --anvio-env NAME            Env with anvi'o + MaMISA (default: anvio-9)
+  --anvio-env NAME            Env with anvi'o + Echidna (default: anvio-9)
   --checkm2-env NAME          Env with CheckM2 (default: checkm2)
   --anvi-prefix STR           Prefix for clipping files (default: MisAsm)
   --max-length / --min-completeness / --max-contamination   process-large-contigs tuning
@@ -531,7 +531,7 @@ Optional:
   --threads INT               Threads (default: 1)
   --tiers LIST                Tiers to carry downstream (default: HQ,MQ)
   --genome-ext STR            Bin extension without dot (default: fa)
-  --mamisa-env NAME           Env for pure-MaMISA steps (default: current env)
+  --echidna-env NAME           Env for pure-Echidna steps (default: current env)
   --checkm2-env / --gtdbtk-env / --gunc-env / --mimag-env   tool envs
   --gtdbtk-data PATH          GTDB-Tk data dir (sets GTDBTK_DATA_PATH)
   --gunc-db PATH              GUNC .dmnd (else $GUNC_DB)

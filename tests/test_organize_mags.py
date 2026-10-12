@@ -1,10 +1,10 @@
-"""Tests for organize-mags naming helpers (mamisa.commands.filter_checkm2)."""
+"""Tests for organize-mags naming helpers (echidna.commands.filter_checkm2)."""
 
 from pathlib import Path
 
 import pytest
 
-from mamisa.commands.filter_checkm2 import (
+from echidna.commands.filter_checkm2 import (
     sanitize_token,
     extract_sample,
     taxonomy_label,

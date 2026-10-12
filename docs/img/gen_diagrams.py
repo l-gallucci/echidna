@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the two MaMISA dataflow diagrams:
+"""Generate the two Echidna dataflow diagrams:
   docs/img/misassembly.svg   - Branch A (PacBio HiFi only)
   docs/img/mag_quality.svg   - Branch B (MAG quality + taxonomy)
 
@@ -12,19 +12,19 @@ import html
 
 # (num, title, tool, left_inputs[(type,label)], right_outputs[(type,label)])
 BRANCH_A = [
-    (1, "process-large-contigs", "mamisa",
+    (1, "process-large-contigs", "echidna",
      [("FASTA", "assembly"), ("DIR", "misassemblies")],
      [("FASTA", "assembly_for_filtering"), ("DIR", "HQ_extracted")]),
     (2, "anvi-script-find-misassemblies", "anvi'o (external)",
      [("BAM", "HiFi mapping")],
      [("TSV", "*-clipping.txt")]),
-    (3, "check-read-chimeras", "mamisa",
+    (3, "check-read-chimeras", "echidna",
      [("BAM", "HiFi mapping"), ("TSV", "kraken2/kaiju")],
      [("TSV", "chimera_read_report + windows")]),
-    (4, "classify-clipping", "mamisa",
+    (4, "classify-clipping", "echidna",
      [("BAM", "HiFi mapping")],
      [("TSV", "clipping_classified")]),
-    (5, "filter-misassemblies", "mamisa",
+    (5, "filter-misassemblies", "echidna",
      [],
      [("FASTA", "assembly_clean")]),
 ]
@@ -35,7 +35,7 @@ BRANCH_B = [
     (2, "run-checkm2", "CheckM2",
      [],
      [("TSV", "quality_report")]),
-    (3, "organize-mags", "mamisa",
+    (3, "organize-mags", "echidna",
      [],
      [("DIR", "HQ / MQ / LQ")]),
     (4, "run-gtdbtk", "GTDB-Tk",
@@ -47,10 +47,10 @@ BRANCH_B = [
     (6, "run-mimag-rna", "barrnap / tRNAscan-SE",
      [],
      [("TSV", "mimag_rna summary")]),
-    (7, "check-chimeras", "mamisa",
+    (7, "check-chimeras", "echidna",
      [],
      [("TSV", "chimera_report")]),
-    (8, "organize-mags (final)", "mamisa",
+    (8, "organize-mags (final)", "echidna",
      [],
      [("DIR", "final MAGs")]),
 ]
@@ -146,12 +146,12 @@ if __name__ == "__main__":
     import os, sys
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "."
     os.makedirs(out_dir, exist_ok=True)
-    a = render(BRANCH_A, "MaMISA - Misassembly cleaning (Branch A)",
+    a = render(BRANCH_A, "Echidna - Misassembly cleaning (Branch A)",
                note="PacBio HiFi only: the soft-clipping method needs long reads "
                     "mapped to their own assembly (Trigodet et al. 2025).")
     with open(os.path.join(out_dir, "misassembly.svg"), "w") as f:
         f.write(a)
-    b = render(BRANCH_B, "MaMISA - MAG quality and taxonomy (Branch B)")
+    b = render(BRANCH_B, "Echidna - MAG quality and taxonomy (Branch B)")
     with open(os.path.join(out_dir, "mag_quality.svg"), "w") as f:
         f.write(b)
     print("wrote misassembly.svg + mag_quality.svg to", out_dir)

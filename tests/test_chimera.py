@@ -1,9 +1,9 @@
-"""Tests for mamisa.utils.chimera."""
+"""Tests for echidna.utils.chimera."""
 
 import math
 import pytest
 
-from mamisa.utils.chimera import (
+from echidna.utils.chimera import (
     compute_gc,
     windowed_gc,
     gc_statistics,

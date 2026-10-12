@@ -1,6 +1,6 @@
 # Workflows
 
-MaMISA has two independent branches. Keep them separate: they answer different
+Echidna has two independent branches. Keep them separate: they answer different
 questions and have different inputs.
 
 - Branch A - Misassembly cleaning: take a raw assembly and the reads mapped back
@@ -38,11 +38,11 @@ HiFi reads with `minimap2 -ax map-hifi`, keep supplementary alignments (do not
 
 | Step | Command | External input (type) | Produces (type) | Env |
 |---|---|---|---|---|
-| 1 | `process-large-contigs` | assembly (FASTA), misassemblies (DIR) | `assembly_for_filtering.fa` (FASTA), `HQ_extracted/` (DIR) | mamisa (CheckM2 via `--checkm2-env`) |
+| 1 | `process-large-contigs` | assembly (FASTA), misassemblies (DIR) | `assembly_for_filtering.fa` (FASTA), `HQ_extracted/` (DIR) | echidna (CheckM2 via `--checkm2-env`) |
 | 2 | `anvi-script-find-misassemblies` (external) | HiFi mapping (BAM) | `*-clipping.txt` (TSV) | anvio-9 |
-| 3 | `check-read-chimeras` | HiFi mapping (BAM), Kraken2/Kaiju per-read (TSV) | `chimera_read_report.tsv`, `chimera_read_windows.tsv` (TSV) | mamisa |
-| 4 | `classify-clipping` | HiFi mapping (BAM) | `clipping_classified.tsv` (TSV) | mamisa |
-| 5 | `filter-misassemblies` | none (uses steps 1-4) | `assembly_clean.fa` (FASTA) | mamisa |
+| 3 | `check-read-chimeras` | HiFi mapping (BAM), Kraken2/Kaiju per-read (TSV) | `chimera_read_report.tsv`, `chimera_read_windows.tsv` (TSV) | echidna |
+| 4 | `classify-clipping` | HiFi mapping (BAM) | `clipping_classified.tsv` (TSV) | echidna |
+| 5 | `filter-misassemblies` | none (uses steps 1-4) | `assembly_clean.fa` (FASTA) | echidna |
 
 Steps 3 and 4 are optional but recommended: step 3 adds read-level taxonomy, step
 4 labels each clipping position. Step 5 is the only required follow-up to step 1.
@@ -59,12 +59,12 @@ run-mimag-rna must see the same genome names, so do not rename between them (see
 |---|---|---|---|---|
 | 1 | binning (external) | clean assembly (FASTA), mapping (BAM) | `bins/` (FASTA) | - |
 | 2 | `run-checkm2` | none (uses bins) | `quality_report.tsv` (TSV) | checkm2 |
-| 3 | `organize-mags` | none (uses checkm2 + bins) | `HQ/ MQ/ LQ/` tiers (DIR) | mamisa |
+| 3 | `organize-mags` | none (uses checkm2 + bins) | `HQ/ MQ/ LQ/` tiers (DIR) | echidna |
 | 4 | `run-gtdbtk` | GTDB-Tk DB (DIR) | `gtdbtk.*.summary.tsv` (TSV) | gtdbtk |
 | 5 | `run-gunc` | GUNC DB (`.dmnd`) | `*.maxCSS_level.tsv`, `*.contig_assignments.tsv` (TSV) | gunc |
 | 6 | `run-mimag-rna` | none (uses selected; GTDB-Tk for `--split-by-domain`) | `mimag_rna` summary (TSV) | mimag |
-| 7 | `check-chimeras` | none (uses gunc + checkm2 + gtdbtk) | `chimera_report.tsv` (TSV) | mamisa |
-| 8 | `organize-mags` (final) | none (renames + gates on all of the above) | final MAGs (DIR) | mamisa |
+| 7 | `check-chimeras` | none (uses gunc + checkm2 + gtdbtk) | `chimera_report.tsv` (TSV) | echidna |
+| 8 | `organize-mags` (final) | none (renames + gates on all of the above) | final MAGs (DIR) | echidna |
 
 run-gunc at step 5 should use `--contig-taxonomy-output` so step 7 gets the
 per-contig multi-clade signal. run-mimag-rna is optional (full-MIMAG HQ gate).
@@ -74,17 +74,17 @@ per-contig multi-clade signal. run-mimag-rna is optional (full-MIMAG HQ gate).
 ### One command per branch (`*-wf`, like `gtdbtk classify_wf`)
 
 Each branch has a single command that chains its steps, calling every
-sub-command in the right conda env for you. Run them from the `mamisa` env.
+sub-command in the right conda env for you. Run them from the `echidna` env.
 
 ```bash
 # Branch A - misassembly cleaning (PacBio HiFi only)
-mamisa misassembly-wf \
+echidna misassembly-wf \
     --assembly assembly.fa --bam hifi_mapping.bam -o misasm_wf/ --threads 40 \
     --anvio-env anvio-9 --checkm2-env checkm2 \
     --kraken2-output reads.kraken2 --kraken2-report report.txt   # optional taxonomy
 
 # Branch B - MAG quality + taxonomy
-mamisa mag-quality-wf \
+echidna mag-quality-wf \
     --bins-dir bins/ -o mag_wf/ --threads 40 --tiers HQ,MQ \
     --gtdbtk-data /data/gtdbtk_r220 --gunc-db /data/gunc/gunc_db_gtdb214.dmnd \
     --split-by-domain
@@ -98,7 +98,7 @@ check-chimeras and run-mimag-rna all match (no rename until the final step), and
 passes `--contig-taxonomy-output` to GUNC automatically.
 
 The `*-wf` commands shell out to `conda run -n <env> ...`, so the tool envs must
-exist and have MaMISA installed (including the anvi'o env, for
+exist and have Echidna installed (including the anvi'o env, for
 `run-anvi-misassemblies`). See [installation.md](installation.md).
 
 ### Per command (full control)

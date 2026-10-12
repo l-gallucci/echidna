@@ -1,8 +1,8 @@
-# MaMISA — MAG quality-control workflow
+# Echidna — MAG quality-control workflow
 #
 # Each rule runs in its OWN conda env (envs/*.yaml) because CheckM2, GTDB-Tk and
 # GUNC pin conflicting Python/pandas/numpy/DIAMOND and cannot share one env.
-# MaMISA itself is dependency-free and is pip-installed into every env.
+# Echidna itself is dependency-free and is pip-installed into every env.
 #
 # Pipeline (binning + anvi'o misassembly detection are assumed done upstream):
 #
@@ -31,7 +31,7 @@ THREADS = config["threads"]
 # own named envs wrapped with `conda run -n` (use_named_envs: true).
 USE_NAMED = bool(config.get("use_named_envs", False))
 ENVS = {
-    "mamisa":  config.get("env_mamisa", ""),
+    "echidna":  config.get("env_echidna", ""),
     "checkm2": config.get("env_checkm2", ""),
     "gtdbtk":  config.get("env_gtdbtk", ""),
     "gunc":    config.get("env_gunc", ""),
@@ -57,7 +57,7 @@ rule all:
 
 # Named preset for the MAG-quality branch (same targets as `all`), so you can be
 # explicit: `snakemake all_mag_quality ...`. The misassembly branch is not in
-# this Snakefile; run it with `mamisa misassembly-wf` (PacBio HiFi only).
+# this Snakefile; run it with `echidna misassembly-wf` (PacBio HiFi only).
 rule all_mag_quality:
     input:
         rules.all.input
@@ -76,7 +76,7 @@ rule run_checkm2:
     conda:
         "envs/checkm2.yaml"
     shell:
-        "{params.pre}mamisa run-checkm2 --genome-dir {input.genomes} --output {params.outdir} "
+        "{params.pre}echidna run-checkm2 --genome-dir {input.genomes} --output {params.outdir} "
         "--extension {EXT} --threads {threads} --force {params.db}"
 
 
@@ -95,7 +95,7 @@ rule run_gtdbtk:
         "envs/gtdbtk.yaml"
     shell:
         "GTDBTK_DATA_PATH={config[gtdbtk_data]} "
-        "{params.pre}mamisa run-gtdbtk --genome-dir {input.genomes} --output {output.outdir} "
+        "{params.pre}echidna run-gtdbtk --genome-dir {input.genomes} --output {output.outdir} "
         "--extension {EXT} --cpus {threads} {params.skip}"
 
 
@@ -110,7 +110,7 @@ rule run_gunc:
     conda:
         "envs/gunc.yaml"
     shell:
-        "{params.pre}mamisa run-gunc --genome-dir {input.genomes} --output {output.outdir} "
+        "{params.pre}echidna run-gunc --genome-dir {input.genomes} --output {output.outdir} "
         "--file-suffix .{EXT} --threads {threads} --db-file {config[gunc_db]}"
 
 
@@ -126,7 +126,7 @@ rule run_mimag_rna:
     conda:
         "envs/mimag.yaml"
     shell:
-        "{params.pre}mamisa run-mimag-rna --genome-dir {input.genomes} --output {params.outdir} "
+        "{params.pre}echidna run-mimag-rna --genome-dir {input.genomes} --output {params.outdir} "
         "--extension {EXT} --kingdom {MIMAG_KING} --threads {threads}"
 
 
@@ -147,14 +147,14 @@ rule organize_mags:
     output:
         merged=f"{OUT}/organized/merged_quality.tsv",
     params:
-        pre=pre("mamisa"),
+        pre=pre("echidna"),
         outdir=f"{OUT}/organized",
         checkm2_root=f"{OUT}/checkm2",
         mimag=(f"--mimag-rna-dir {OUT}/mimag_rna" if MIMAG_RNA else ""),
     conda:
-        "envs/mamisa.yaml"
+        "envs/echidna.yaml"
     shell:
-        "{params.pre}mamisa organize-mags --checkm2-root {params.checkm2_root} "
+        "{params.pre}echidna organize-mags --checkm2-root {params.checkm2_root} "
         "--genomes-dir {GENOMES} --gtdbtk-dir {input.gtdbtk} "
         "--output {params.outdir} --rename --copy "
         "--sample-regex '{config[sample_regex]}' --tax-level {config[tax_level]} "
@@ -169,10 +169,10 @@ rule check_chimeras:
     output:
         report=f"{OUT}/chimera_report.tsv",
     params:
-        pre=pre("mamisa"),
+        pre=pre("echidna"),
     conda:
-        "envs/mamisa.yaml"
+        "envs/echidna.yaml"
     shell:
-        "{params.pre}mamisa check-chimeras --bins-dir {GENOMES} --output {output.report} "
+        "{params.pre}echidna check-chimeras --bins-dir {GENOMES} --output {output.report} "
         "--gtdbtk-dir {input.gtdbtk} --checkm2-report {input.checkm2} "
         "--gunc-dir {input.gunc} --extensions {EXT}"

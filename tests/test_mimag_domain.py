@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from mamisa.commands.run_mimag_rna import (
+from echidna.commands.run_mimag_rna import (
     load_domains_from_gtdbtk,
     resolve_kingdom,
     _strip_ext,

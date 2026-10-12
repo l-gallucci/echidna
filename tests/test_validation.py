@@ -1,6 +1,6 @@
-"""Tests for mamisa.utils.validation.check_db_path (per-tool path kind)."""
+"""Tests for echidna.utils.validation.check_db_path (per-tool path kind)."""
 
-from mamisa.utils.validation import check_db_path
+from echidna.utils.validation import check_db_path
 
 
 def test_gtdbtk_needs_directory_ok(tmp_path):

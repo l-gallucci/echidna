@@ -1,8 +1,8 @@
-"""Tests for mamisa.utils.bam_stats (SA-tag join detection, clipped bases)."""
+"""Tests for echidna.utils.bam_stats (SA-tag join detection, clipped bases)."""
 
 import math
 
-from mamisa.utils.bam_stats import _PosAccumulator, _extract_clipped_bases
+from echidna.utils.bam_stats import _PosAccumulator, _extract_clipped_bases
 
 
 def test_extract_clipped_bases_leading_softclip():

@@ -48,12 +48,12 @@ Runs Option A's `conda run` commands in order inside one job:
 
 ```bash
 #!/bin/bash
-#SBATCH -J mamisa -c 40 --mem=320G -t 24:00:00
+#SBATCH -J echidna -c 40 --mem=320G -t 24:00:00
 source ~/miniconda3/etc/profile.d/conda.sh
-conda run -n checkm2 mamisa run-checkm2 --genome-dir bins/ -o results/checkm2 --threads 40
-conda run -n gtdbtk  env GTDBTK_DATA_PATH=$GTDBTK_DATA_PATH mamisa run-gtdbtk --genome-dir bins/ -o results/gtdbtk --cpus 40
-conda run -n gunc    mamisa run-gunc    --genome-dir bins/ -o results/gunc --file-suffix .fa --threads 40 --db-file $GUNC_DB
-# ... organize-mags, check-chimeras in the mamisa env
+conda run -n checkm2 echidna run-checkm2 --genome-dir bins/ -o results/checkm2 --threads 40
+conda run -n gtdbtk  env GTDBTK_DATA_PATH=$GTDBTK_DATA_PATH echidna run-gtdbtk --genome-dir bins/ -o results/gtdbtk --cpus 40
+conda run -n gunc    echidna run-gunc    --genome-dir bins/ -o results/gunc --file-suffix .fa --threads 40 --db-file $GUNC_DB
+# ... organize-mags, check-chimeras in the echidna env
 ```
 
 ## Notes

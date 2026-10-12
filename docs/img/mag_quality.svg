@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="940" height="906" viewBox="0 0 940 906" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
 <rect width="940" height="906" fill="#ffffff"/>
 <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a8f98"/></marker></defs>
-<text x="470.0" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#1a1a1a">MaMISA - MAG quality and taxonomy (Branch B)</text>
+<text x="470.0" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#1a1a1a">Echidna - MAG quality and taxonomy (Branch B)</text>
 <circle cx="40" cy="64" r="7" fill="#1f6feb" stroke="#1f6feb"/>
 <text x="54" y="68" font-size="12" fill="#333">needs an external input file you provide</text>
 <circle cx="430" cy="64" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
@@ -36,7 +36,7 @@
 <rect x="330" y="334" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
 <circle cx="348" cy="362.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
 <text x="364" y="358.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[3] organize-mags</text>
-<text x="364" y="375.0" font-size="11" fill="#6e7781">mamisa</text>
+<text x="364" y="375.0" font-size="11" fill="#6e7781">echidna</text>
 <line x1="632" y1="362.0" x2="638" y2="362.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
 <rect x="640" y="352.0" width="46" height="20" rx="4" fill="#6e7781"/>
 <text x="663.0" y="366.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DIR</text>
@@ -80,7 +80,7 @@
 <rect x="330" y="702" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
 <circle cx="348" cy="730.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
 <text x="364" y="726.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[7] check-chimeras</text>
-<text x="364" y="743.0" font-size="11" fill="#6e7781">mamisa</text>
+<text x="364" y="743.0" font-size="11" fill="#6e7781">echidna</text>
 <line x1="632" y1="730.0" x2="638" y2="730.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
 <rect x="640" y="720.0" width="46" height="20" rx="4" fill="#1f6feb"/>
 <text x="663.0" y="734.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">TSV</text>
@@ -89,7 +89,7 @@
 <rect x="330" y="794" width="300" height="56" rx="8" fill="#f6f8fa" stroke="#c9d1d9"/>
 <circle cx="348" cy="822.0" r="7" fill="#ffffff" stroke="#8a8f98" stroke-width="2"/>
 <text x="364" y="818.0" font-size="13.5" font-weight="700" fill="#1a1a1a">[8] organize-mags (final)</text>
-<text x="364" y="835.0" font-size="11" fill="#6e7781">mamisa</text>
+<text x="364" y="835.0" font-size="11" fill="#6e7781">echidna</text>
 <line x1="632" y1="822.0" x2="638" y2="822.0" stroke="#8a8f98" stroke-width="1.3" marker-end="url(#arr)"/>
 <rect x="640" y="812.0" width="46" height="20" rx="4" fill="#6e7781"/>
 <text x="663.0" y="826.0" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">DIR</text>

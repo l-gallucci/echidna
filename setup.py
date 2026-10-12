@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for MaMISA
+Setup script for Echidna
 """
 
 from setuptools import setup, find_packages
@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
-    open("mamisa/__init__.py").read(),
+    open("echidna/__init__.py").read(),
 )
 version = {"__version__": _version_match.group(1) if _version_match else "0.0.0"}
 
@@ -21,14 +21,14 @@ if readme_file.exists():
     long_description = readme_file.read_text()
 
 setup(
-    name="mamisa",
+    name="echidna",
     version=version.get("__version__", "1.0.0"),
-    description="MaMISA - Manage Misassemblies: Toolkit for metagenomic assembly quality control",
+    description="Echidna - metagenomic assembly, MAG integrity and chimera screening",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Luigi Gallucci",
     author_email="luigigallucci8@gmail.com",
-    url="https://github.com/l-gallucci/mamisa",
+    url="https://github.com/l-gallucci/echidna",
     license="MIT",
 
     packages=find_packages(),
@@ -50,7 +50,7 @@ setup(
     
     entry_points={
         'console_scripts': [
-            'mamisa=mamisa.__main__:main',
+            'echidna=echidna.__main__:main',
         ],
     },
     
@@ -70,7 +70,7 @@ setup(
     keywords="bioinformatics metagenomics assembly quality-control",
 
     project_urls={
-        "Bug Reports": "https://github.com/l-gallucci/mamisa/issues",
-        "Source": "https://github.com/l-gallucci/mamisa",
+        "Bug Reports": "https://github.com/l-gallucci/echidna/issues",
+        "Source": "https://github.com/l-gallucci/echidna",
     },
 )

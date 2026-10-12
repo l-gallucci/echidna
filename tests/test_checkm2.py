@@ -1,9 +1,9 @@
-"""Tests for mamisa.utils.checkm2."""
+"""Tests for echidna.utils.checkm2."""
 
 import math
 import pytest
 
-from mamisa.utils.checkm2 import (
+from echidna.utils.checkm2 import (
     parse_quality_value,
     assign_tier,
     parse_quality_report,

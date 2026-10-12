@@ -1,10 +1,10 @@
-"""Tests for MIMAG rRNA/tRNA parsing (mamisa.utils.rrna) and the HQ gate."""
+"""Tests for MIMAG rRNA/tRNA parsing (echidna.utils.rrna) and the HQ gate."""
 
 from pathlib import Path
 
 import pytest
 
-from mamisa.utils.rrna import (
+from echidna.utils.rrna import (
     parse_barrnap_gff,
     parse_trnascan,
     assess_mimag_rna,
@@ -13,7 +13,7 @@ from mamisa.utils.rrna import (
     STANDARD_AA,
     MIMAG_MIN_AA,
 )
-from mamisa.commands.filter_checkm2 import apply_mimag_rna_gate
+from echidna.commands.filter_checkm2 import apply_mimag_rna_gate
 
 
 BARRNAP_GFF = """\
