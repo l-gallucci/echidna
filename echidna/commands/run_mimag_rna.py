@@ -53,10 +53,15 @@ def check_mimag_env() -> bool:
 
 
 def run_barrnap(genome: Path, kingdom: str, gff_out: Path,
-                threads: int) -> bool:
-    """Run barrnap on one genome, writing a GFF. Returns True on success."""
-    cmd = ['barrnap', '--kingdom', kingdom, '--threads', str(threads),
-           str(genome)]
+                threads: int, outseq: Optional[Path] = None) -> bool:
+    """Run barrnap on one genome, writing a GFF. Returns True on success.
+
+    When `outseq` is given, barrnap also writes the detected rRNA gene sequences
+    (FASTA) there - the 16S of which feeds check-ssu-taxonomy."""
+    cmd = ['barrnap', '--kingdom', kingdom, '--threads', str(threads)]
+    if outseq is not None:
+        cmd += ['--outseq', str(outseq)]
+    cmd.append(str(genome))
     try:
         with open(gff_out, 'w') as out:
             subprocess.run(cmd, check=True, stdout=out,
@@ -84,14 +89,22 @@ _KINGDOM = {'bac': ('bac', '-B'), 'arc': ('arc', '-A'), 'euk': ('euk', '-E')}
 
 
 def process_genome(genome: Path, work_dir: Path, kingdom: str,
-                   threads: int) -> Optional[dict]:
-    """Run both tools on one genome and return its MIMAG rRNA/tRNA record."""
+                   threads: int, ssu_dir: Optional[Path] = None) -> Optional[dict]:
+    """Run both tools on one genome and return its MIMAG rRNA/tRNA record.
+
+    When `ssu_dir` is given, the rRNA gene FASTA is kept there as
+    <genome>.rrna.fna (survives intermediate cleanup)."""
     barrnap_kingdom, trnascan_flag = _KINGDOM.get(kingdom, ('bac', '-B'))
 
     gff_out = work_dir / f"{genome.stem}.barrnap.gff"
     trna_out = work_dir / f"{genome.stem}.trnascan.tsv"
 
-    if not run_barrnap(genome, barrnap_kingdom, gff_out, threads):
+    outseq = None
+    if ssu_dir is not None:
+        ssu_dir.mkdir(parents=True, exist_ok=True)
+        outseq = ssu_dir / f"{genome.stem}.rrna.fna"
+
+    if not run_barrnap(genome, barrnap_kingdom, gff_out, threads, outseq=outseq):
         return None
     if not run_trnascan(genome, trnascan_flag, trna_out):
         return None
@@ -231,18 +244,24 @@ Examples:
                         help='Comma-separated tiers to process (default: HQ,MQ,LQ)')
     parser.add_argument('--keep-intermediate', action='store_true',
                         help='Keep per-genome barrnap/tRNAscan output files')
+    parser.add_argument('--outseq', action='store_true',
+                        help='Also write detected rRNA gene sequences to '
+                             '<output>/rrna_fasta/<genome>.rrna.fna (the 16S feeds '
+                             'check-ssu-taxonomy)')
 
     parser.set_defaults(func=run)
     return parser
 
 
 def _process_dir(input_dir: Path, output_dir: Path, extension: str,
-                 kingdom_for, threads: int) -> List[dict]:
+                 kingdom_for, threads: int,
+                 ssu_dir: Optional[Path] = None) -> List[dict]:
     """
     Process every genome in a directory; return list of records.
 
     `kingdom_for` is a callable genome_path -> 'bac'/'arc'/'euk', so the
     kingdom can be fixed or resolved per genome (e.g. from GTDB-Tk).
+    When `ssu_dir` is given, per-genome rRNA FASTAs are kept there.
     """
     genomes = collect_genomes(input_dir, extension)
     if not genomes:
@@ -256,7 +275,7 @@ def _process_dir(input_dir: Path, output_dir: Path, extension: str,
     for i, genome in enumerate(genomes, 1):
         kingdom = kingdom_for(genome)
         log_info(f"  [{i}/{len(genomes)}] {genome.name} [{kingdom}]")
-        rec = process_genome(genome, work_dir, kingdom, threads)
+        rec = process_genome(genome, work_dir, kingdom, threads, ssu_dir=ssu_dir)
         if rec:
             rec['kingdom'] = kingdom
             records.append(rec)
@@ -300,15 +319,18 @@ def run(args):
                 continue
             log_info(f"\nTier: {tier}")
             tier_out = args.output / tier
+            ssu_dir = (tier_out / "rrna_fasta") if args.outseq else None
             recs = _process_dir(tier_dir, tier_out, args.extension,
-                                kingdom_for, args.threads)
+                                kingdom_for, args.threads, ssu_dir=ssu_dir)
             for r in recs:
                 r['tier'] = tier
             all_records.extend(recs)
     else:
         validate_dir_exists(args.genome_dir, "Genome directory")
+        ssu_dir = (args.output / "rrna_fasta") if args.outseq else None
         all_records = _process_dir(args.genome_dir, args.output,
-                                   args.extension, kingdom_for, args.threads)
+                                   args.extension, kingdom_for, args.threads,
+                                   ssu_dir=ssu_dir)
 
     if not all_records:
         log_error("No genomes processed")

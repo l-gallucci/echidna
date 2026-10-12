@@ -11,6 +11,7 @@ from . import check_chimeras
 from . import check_read_chimeras
 from . import classify_contigs
 from . import run_mmseqs_contigs
+from . import check_ssu_taxonomy
 from . import classify_clipping
 from . import check_zero_coverage
 from . import run_anvi_misassemblies
@@ -27,6 +28,7 @@ __all__ = [
     'check_read_chimeras',
     'classify_contigs',
     'run_mmseqs_contigs',
+    'check_ssu_taxonomy',
     'classify_clipping',
     'check_zero_coverage',
     'run_anvi_misassemblies',

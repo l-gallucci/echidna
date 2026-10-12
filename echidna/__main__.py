@@ -20,6 +20,7 @@ from echidna.commands import check_chimeras
 from echidna.commands import check_read_chimeras
 from echidna.commands import classify_contigs
 from echidna.commands import run_mmseqs_contigs
+from echidna.commands import check_ssu_taxonomy
 from echidna.commands import classify_clipping
 from echidna.commands import check_zero_coverage
 from echidna.commands import setup_workflow
@@ -51,6 +52,7 @@ Available commands:
   check-read-chimeras     Detect chimeric contigs via read-level taxonomy (Kraken2+BAM)
   classify-contigs        Per-contig taxonomy check: flag bins whose contigs span >=2 taxa
   run-mmseqs-contigs      Run MMseqs2 taxonomy on bin contigs (input for classify-contigs)
+  check-ssu-taxonomy      Classify each MAG's 16S and check it agrees with GTDB-Tk (blastn)
   classify-clipping       Classify each clipping position with BAM evidence
   check-zero-coverage     Validate assembly regions with no read coverage via BLAST
   setup-workflow          Configure the Snakemake workflow (env yamls + config)
@@ -83,6 +85,7 @@ For more information, visit: https://github.com/l-gallucci/echidna
     check_read_chimeras.register_parser(subparsers)
     classify_contigs.register_parser(subparsers)
     run_mmseqs_contigs.register_parser(subparsers)
+    check_ssu_taxonomy.register_parser(subparsers)
     classify_clipping.register_parser(subparsers)
     check_zero_coverage.register_parser(subparsers)
     setup_workflow.register_parser(subparsers)

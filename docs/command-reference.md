@@ -185,6 +185,50 @@ column, letting `classify-contigs` resolve any rank without a nodes.dmp. Note:
 contig headers must be unique across bins (they are concatenated into one query
 FASTA).
 
+## check-ssu-taxonomy
+
+Classifies each MAG's 16S/SSU rRNA gene (blastn vs an SSU reference DB) and
+checks it agrees with the genome-level GTDB-Tk taxonomy. A 16S resolving to a
+different taxon than the genome flags misbinning or a contaminating rRNA -
+orthogonal to the GUNC/GC/MMseqs per-contig signals. Report-only.
+
+Only MAGs with a recovered ~full-length 16S are judged (rRNA is often
+fragmented/unbinned), and it is confirmatory, not exhaustive. The 16S comes from
+`run-mimag-rna --outseq` (barrnap writes `<genome>.rrna.fna` into
+`<output>/rrna_fasta/`). blastn is in the echidna env; barrnap runs in the mimag
+env - so extraction and classification stay in their own envs.
+
+Build the blastn DB first (GTDB `ssu_all.fna` recommended, 1:1 with GTDB-Tk):
+`makeblastdb -in ssu_all.fna -dbtype nucl -out /data/ssu_gtdb/ssu`.
+
+```
+Required:
+  --ssu-fasta-dir PATH        Directory of <genome>.rrna.fna (run-mimag-rna --outseq)
+  --ssu-db PREFIX             blastn SSU DB prefix (makeblastdb -dbtype nucl)
+  --gtdbtk-dir PATH           GTDB-Tk output (genome-level taxonomy to compare)
+
+Optional:
+  --ssu-taxonomy {gtdb,silva} How to read the DB hit lineage (default: gtdb).
+                              gtdb = d__/p__/c__ prefixes, compares 1:1 with
+                              GTDB-Tk; silva = positional names, agreement is
+                              best-effort (SILVA names differ from GTDB)
+  --rank STR                  Rank to compare 16S vs genome (default: order)
+  --min-length INT            Min 16S length to classify (default: 1000 bp)
+  -o, --output PATH           Output TSV (default: ssu_taxonomy.tsv)
+  --threads INT / --task STR  blastn threads / task (default: 1 / megablast)
+  --blastn-exe NAME           blastn executable (default: blastn)
+  --keep-tmp                  Keep the combined query FASTA and blast TSV
+```
+
+Output columns: `genome`, `has_16s`, `ssu_len`, `ssu_pident`, `ssu_taxon`,
+`genome_taxon`, `agree` (True/False/NA), `note` (`no_16s`, `partial_16s`,
+`no_blast_hit`, `low_identity`). `agree=False` is the flag to review.
+
+DB choice: GTDB SSU keeps names aligned with GTDB-Tk so `agree` is meaningful;
+SILVA is broader (better 16S coverage) but its names differ (e.g. Proteobacteria
+vs GTDB Pseudomonadota), so at phylum the comparison is noisy - use class/order,
+and read `ssu_taxon`/`genome_taxon` directly rather than trusting `agree`.
+
 ## classify-clipping
 
 ```
@@ -376,6 +420,9 @@ Optional:
   --threads INT               Threads for barrnap (default: 1)
   --tiers LIST                Tiers to process (default: HQ,MQ,LQ)
   --keep-intermediate         Keep per-genome barrnap/tRNAscan output files
+  --outseq                    Also write detected rRNA genes to
+                              <output>/rrna_fasta/<genome>.rrna.fna; the 16S
+                              feeds check-ssu-taxonomy
 ```
 
 Mixed bacteria + archaea: run once with `--split-by-domain --gtdbtk-dir <taxonomy>`.

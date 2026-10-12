@@ -62,6 +62,7 @@ to be on `PATH` for the command that uses it.
 | `check-chimeras` | (none; `--gunc-dir` consumes GUNC output) |
 | `classify-contigs` | (none; consumes a Kraken2/Kaiju/MMseqs2 per-contig classification + nodes.dmp) |
 | `run-mmseqs-contigs` | MMseqs2 |
+| `check-ssu-taxonomy` | BLAST+ (`blastn`, in the echidna env) + an SSU blastn DB; 16S from `run-mimag-rna --outseq` |
 | `classify-clipping` | samtools (+ BLAST+ for `--self-blast`) |
 | `check-zero-coverage` | BLAST+ (`blastn`/`makeblastdb`), optional Meryl |
 | `filter-misassemblies` | anvi'o (upstream misassembly detection) |
