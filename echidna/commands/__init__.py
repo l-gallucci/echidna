@@ -17,6 +17,7 @@ from . import check_zero_coverage
 from . import run_anvi_misassemblies
 from . import misassembly_wf
 from . import mag_quality_wf
+from . import final_report
 
 __all__ = [
     'filter_misassemblies',
@@ -34,4 +35,5 @@ __all__ = [
     'run_anvi_misassemblies',
     'misassembly_wf',
     'mag_quality_wf',
+    'final_report',
 ]

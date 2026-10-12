@@ -29,6 +29,7 @@ from echidna.commands import check_envs
 from echidna.commands import run_anvi_misassemblies
 from echidna.commands import misassembly_wf
 from echidna.commands import mag_quality_wf
+from echidna.commands import final_report
 from echidna import __version__
 
 
@@ -58,6 +59,7 @@ Available commands:
   setup-workflow          Configure the Snakemake workflow (env yamls + config)
   fetch-databases         Download reference DBs, or register existing ones
   check-envs              Sanity-check existing conda envs (versions + compatibility)
+  final-report            Join per-MAG signals (CheckM2/GTDB-Tk/MIMAG/chimera/16S) into one table
 
 Examples:
   echidna filter-misassemblies --help
@@ -94,7 +96,8 @@ For more information, visit: https://github.com/l-gallucci/echidna
     run_anvi_misassemblies.register_parser(subparsers)
     misassembly_wf.register_parser(subparsers)
     mag_quality_wf.register_parser(subparsers)
-    
+    final_report.register_parser(subparsers)
+
     # Parse arguments
     args = parser.parse_args()
     

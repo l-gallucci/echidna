@@ -589,3 +589,46 @@ Optional:
   --skip STEP[,STEP]          Skip steps
   --dry-run                   Print commands without running
 ```
+
+## final-report
+
+Joins the per-MAG signals the other commands produce into one table - one row
+per MAG. Reads only existing TSVs; runs nothing, needs no external tools. Every
+input is optional and joined by genome name (FASTA extension stripped); missing
+fields are `NA`.
+
+```
+Optional (pass whatever you have):
+  --checkm2-report PATH       A single CheckM2 quality_report.tsv
+  --checkm2-root PATH         Directory to search for quality_report.tsv (recursive)
+  --gtdbtk-dir PATH           GTDB-Tk output directory
+  --mimag-rna-dir PATH        run-mimag-rna output (mimag_rna_summary.tsv)
+  --chimera-report PATH       check-chimeras chimera_report.tsv
+  --contig-taxonomy PATH      classify-contigs <output>.bins.tsv
+  --ssu-report PATH           check-ssu-taxonomy ssu_taxonomy.tsv
+  --genomes-dir PATH          Define the genome set from a directory (else the
+                              union of names across the inputs)
+  --extensions LIST           Genome extensions for --genomes-dir (default: fa,fasta,fna)
+  --tax-level STR             GTDB rank shown in rank_taxon (default: phylum)
+  -o, --output PATH           Output TSV (default: final_report.tsv)
+```
+
+Columns: `genome`, `completeness`, `contamination`, `tier` (CheckM2), `taxonomy`,
+`rank_taxon` (GTDB-Tk), `n_16S`, `rrna_complete`, `trna_complete`, `mimag_rna_ok`
+(MIMAG), `chimera_risk` (check-chimeras), `contig_chimera`, `n_foreign_contigs`
+(classify-contigs), `ssu_agree`, `ssu_taxon` (check-ssu-taxonomy), `concerns`.
+
+`concerns` collects the red flags - `contam>10`, `chimera_High`, `chimera_Medium`,
+`contig_chimera`, `ssu_disagree`, `mimag_rna_incomplete` - so you can sort/filter
+on it. An empty `concerns` means no red flag fired; it is a summary, not a formal
+pass (apply your own thresholds). The run prints a tally of each concern.
+
+```
+echidna final-report \
+  --checkm2-report checkm2/quality_report.tsv \
+  --gtdbtk-dir taxonomy/ --mimag-rna-dir mimag/ \
+  --chimera-report chimera_report.tsv \
+  --contig-taxonomy contig_taxonomy.tsv.bins.tsv \
+  --ssu-report ssu_taxonomy.tsv \
+  -o final_report.tsv
+```
