@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/l-gallucci/echidna/main/assets/LOGO.jpg" alt="Echidna Logo" width="400">
+  <img src="https://raw.githubusercontent.com/l-gallucci/echidna/main/assets/LOGO2.jpg" alt="Echidna Logo" width="400">
 </p>
 
 # Echidna - metagenomic assembly, MAG integrity and chimera screening
