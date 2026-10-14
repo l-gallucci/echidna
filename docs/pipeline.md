@@ -187,13 +187,16 @@ echidna check-chimeras \
     --gtdbtk-dir 09_taxonomy/ \
     --checkm2-report 07_checkm2/quality_report.tsv \
     --gunc-dir 07_gunc/ \
-    --gunc-tax-rank phylum \
+    --contig-taxonomy 02_chimera/contig_taxonomy.tsv.bins.tsv \
     --gc-window 5000 --gc-step 2500
 ```
 
+The per-contig taxonomy signal comes from classify-contigs (MMseqs/Kraken2/Kaiju),
+weighted by the foreign LENGTH fraction, via `--contig-taxonomy`.
+
 Pre-dRep filter: exclude rows with `gunc_pass == False` or `chimera_risk == High`;
 send Medium to manual review (the `reasons` column names the contigs driving each
-GC delta and reports per-contig clade counts).
+GC delta and the foreign-fraction).
 
 ### Step 4 - Classify clipping positions
 

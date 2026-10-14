@@ -47,15 +47,18 @@ Optional:
 
 ## check-chimeras
 
-Combines GUNC gene-level taxonomy, CheckM2 contamination, GTDB-Tk warnings and
-GC heterogeneity into a per-bin High/Medium/Low/Clean risk. Gene-level taxonomy
-drives the score; GC is noisy (a single short contig can set the max-min delta)
-so it only corroborates and never reaches Medium on its own. If `--gunc-dir`
-contains `*.contig_assignments.tsv` (from `run-gunc --contig-taxonomy-output`),
-bins whose contigs span two or more clades are a **hard flag**: risk is forced
-to High regardless of the other signals, at whatever `--gunc-tax-rank` you
-choose (contigs of different taxonomy in one bin are contamination at any rank).
-The `reasons` column names the contigs that set each GC delta, with their lengths.
+Combines GUNC gene-level pass/fail, CheckM2 contamination, GTDB-Tk warnings, GC
+heterogeneity and the per-contig taxonomy foreign fraction (from
+classify-contigs/MMseqs) into a per-bin High/Medium/Low/Clean risk. The score is
+abundance-aware: GUNC's own `pass.GUNC` is trusted (it is already proportion
+based), and the per-contig signal is weighted by the foreign LENGTH fraction, so
+a few stray genes / one short contig (likely HGT) stay low while a substantial
+foreign fraction drives High. GC never reaches Medium on its own. The `reasons`
+column names the contigs that set each GC delta, with their lengths.
+
+All sources are joined by a canonical genome name (FASTA extension plus any
+`--name-strip` suffix removed); bins with no match in a source are WARNED about
+(so a silent N/A becomes visible).
 
 ```
 Required:
@@ -65,11 +68,11 @@ Optional:
   -o, --output PATH           Output TSV (default: chimera_report.tsv)
   --gtdbtk-dir PATH           GTDB-Tk output directory (adds taxonomy signals)
   --checkm2-report PATH       CheckM2 report (adds contamination signal)
-  --gunc-dir PATH             GUNC output directory (gene-level clade-consistency; plus
-                              per-contig multi-clade if *.contig_assignments.tsv present)
-  --gunc-tax-rank STR         Rank for per-contig clade counting / hard flag (default: phylum;
-                              order is a good finer choice, genus is noisier)
-  --gunc-min-genes INT        Min genes per contig before its clade counts (default: 3)
+  --gunc-dir PATH             GUNC output directory (adds pass/fail + CSS signal)
+  --contig-taxonomy PATH      classify-contigs <output>.bins.tsv (adds the per-contig
+                              taxonomy foreign-fraction signal, from MMseqs/Kraken2/Kaiju)
+  --name-strip LIST           Suffixes to strip from genome names when joining sources
+                              (e.g. ".contigs,_genomic"); FASTA extensions always stripped
   --gc-window INT             GC window size in bp (default: 5000)
   --gc-step INT               GC step in bp (default: 2500)
   --taxonomy-level STR        Taxonomy level for comparison (default: phylum)
@@ -80,19 +83,19 @@ Optional:
 Output columns: `bin`, `n_contigs`, `is_circular_candidate`, `gc_mean_pct`,
 `gc_delta_pct`, `gc_cv_pct`, `windowed_gc_delta_pct`, `checkm2_contamination`,
 `gtdbtk_taxonomy`, `gtdbtk_warning`, `gunc_pass`, `gunc_css`,
-`gunc_contig_clades`, `chimera_risk`, `reasons`.
+`contig_foreign_frac`, `chimera_risk`, `reasons`.
 
-Scoring (High >=5, Medium >=2, Low >=1, Clean 0):
+Scoring (points may be fractional; High >=3, Medium >=2, Low >=0.5, Clean 0):
 
 | Signal | Score |
 |---|---|
-| GUNC per-contig taxonomy: contigs span >=2 clades | HARD FLAG -> High |
-| GUNC pass.GUNC = False (aggregate) | +3 |
-| GUNC clade_separation_score > 0.45 | +2 |
-| CheckM2 contamination > 10% / > 5% | +3 / +2 |
-| Inter-contig GC delta > 10% / > 5% | +2 / +1 |
-| Windowed GC delta > 15% (circular contigs) | +1 |
-| GTDB-Tk placement warning | +1 |
+| GUNC `pass.GUNC` = False | +3 (nothing else from GUNC) |
+| GUNC `pass.GUNC` = True & CSS > 0.45 | +1 |
+| Per-contig foreign length fraction >=10% / >=5% / >0% | +3 / +2 / +0.5 |
+| CheckM2 contamination > 10% | +1 (<=10% tolerated: HQ) |
+| Inter-contig GC delta > 10% / > 5% | +1 / +0.5 |
+| Windowed GC delta > 15% (circular contigs) | +0.5 |
+| GTDB-Tk placement warning | +0.5 |
 
 Pre-dRep filter: exclude `gunc_pass == False` or `chimera_risk == High`; send
 Medium to manual review (read the `reasons` column).
@@ -136,13 +139,20 @@ Optional:
   --names-dmp PATH            NCBI names.dmp for readable names (taxid mode only)
   --rank STR                  Rank to compare contigs at (default: order; 'domain'
                               maps to NCBI superkingdom in taxid mode)
+  --min-foreign-frac FLOAT    Min foreign LENGTH fraction (0-1) for chimera_flag=True
+                              (default: 0.05). Below it the foreign contigs are still
+                              listed and foreign_frac reported, just not flagged - a
+                              few genes / one short contig is likely HGT.
   --extensions LIST           Genome extensions (default: fa,fasta,fna)
   --dry-run
 ```
 
 Per-contig columns: `contig`, `bin`, `contig_taxid`, `rank_taxon`, `is_foreign`.
 Per-bin columns: `bin`, `n_contigs`, `n_contigs_resolved`, `n_taxa`,
-`majority_taxon`, `chimera_flag`, `n_foreign_contigs`, `foreign_contigs`, `taxa`.
+`majority_taxon`, `chimera_flag`, `foreign_frac`, `n_foreign_contigs`,
+`foreign_contigs`, `taxa`. The majority taxon and `foreign_frac` are weighted by
+contig LENGTH (bp); `foreign_frac` is what `check-chimeras --contig-taxonomy`
+consumes.
 
 Rank choice: `order` is a good default; `class` separates class-level
 contaminants (e.g. an Alphaproteobacteria contig in a Gammaproteobacteria bin);
@@ -618,7 +628,9 @@ Optional (pass whatever you have):
 Columns: `genome`, `completeness`, `contamination`, `tier` (CheckM2), `taxonomy`,
 `rank_taxon` (GTDB-Tk), `n_16S`, `rrna_complete`, `trna_complete`, `mimag_rna_ok`
 (MIMAG), `chimera_risk` (check-chimeras), `contig_chimera`, `n_foreign_contigs`
-(classify-contigs), `ssu_agree`, `ssu_taxon` (check-ssu-taxonomy), `concerns`.
+(classify-contigs), `ssu_agree`, `ssu_taxon` (check-ssu-taxonomy),
+`gunc_mmseqs_concordance` (True/False/NA: do GUNC pass.GUNC and MMseqs
+classify-contigs agree on chimeric-or-not), `concerns`.
 
 `concerns` collects the red flags - `contam>10`, `chimera_High`, `chimera_Medium`,
 `contig_chimera`, `ssu_disagree`, `mimag_rna_incomplete` - so you can sort/filter

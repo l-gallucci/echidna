@@ -36,6 +36,7 @@ from ..utils.contig_taxonomy import (
     parse_mmseqs_taxonomy,
     parse_mmseqs_lineage,
     assign_contigs_to_bins,
+    collect_contig_lengths,
     summarize_bin_taxa,
     summarize_bin_lineage,
     VALID_RANKS,
@@ -50,12 +51,18 @@ from ..utils.logging import log_info, log_warning, log_error, print_header, prin
 
 CONTIG_FIELDS = ['contig', 'bin', 'contig_taxid', 'rank_taxon', 'is_foreign']
 BIN_FIELDS = ['bin', 'n_contigs', 'n_contigs_resolved', 'n_taxa',
-              'majority_taxon', 'chimera_flag', 'n_foreign_contigs',
-              'foreign_contigs', 'taxa']
+              'majority_taxon', 'chimera_flag', 'foreign_frac',
+              'n_foreign_contigs', 'foreign_contigs', 'taxa']
 
 
-def build_rows(summary: Dict[str, Dict], contig_taxid: Dict[str, int]):
-    """Flatten summarize_bin_taxa() output into per-contig + per-bin rows."""
+def build_rows(summary: Dict[str, Dict], contig_taxid: Dict[str, int],
+               min_foreign_frac: float = 0.0):
+    """Flatten summarize output into per-contig + per-bin rows.
+
+    `chimera_flag` is True only when the bin spans >= 2 taxa AND the foreign
+    length fraction reaches `min_foreign_frac` (so a tiny foreign tail is listed
+    but not flagged). `foreign_frac` is reported either way for downstream use
+    (e.g. check-chimeras weighting)."""
     contig_rows: List[Dict] = []
     bin_rows: List[Dict] = []
     for bin_name in sorted(summary):
@@ -71,13 +78,15 @@ def build_rows(summary: Dict[str, Dict], contig_taxid: Dict[str, int]):
                 'rank_taxon': rank_name,
                 'is_foreign': is_foreign,
             })
+        frac = rec.get('foreign_frac', 0.0)
         bin_rows.append({
             'bin': bin_name,
             'n_contigs': rec['n_contigs'],
             'n_contigs_resolved': rec['n_contigs_resolved'],
             'n_taxa': rec['n_taxa'],
             'majority_taxon': rec['majority_name'],
-            'chimera_flag': rec['chimera'],
+            'chimera_flag': bool(rec['chimera'] and frac >= min_foreign_frac),
+            'foreign_frac': f"{frac:.4f}",
             'n_foreign_contigs': len(rec['foreign_contigs']),
             'foreign_contigs': ';'.join(c for c, _ in rec['foreign_contigs']),
             'taxa': ';'.join(rec['taxa']),
@@ -177,6 +186,11 @@ Examples
                              '(taxid/nodes.dmp path only)')
     parser.add_argument('--rank', default='order', choices=list(VALID_RANKS),
                         help='Rank at which to compare per-contig taxa (default: order)')
+    parser.add_argument('--min-foreign-frac', type=float, default=0.05,
+                        help='Min foreign LENGTH fraction (0-1) for chimera_flag=True '
+                             '(default: 0.05). Below it the foreign contigs are still '
+                             'listed and foreign_frac reported, but the bin is not '
+                             'flagged - a few genes / one short contig is likely HGT.')
     parser.add_argument('--extensions', default='fa,fasta,fna',
                         help='Comma-separated bin file extensions (default: fa,fasta,fna)')
     parser.add_argument('--dry-run', action='store_true',
@@ -230,17 +244,21 @@ def run(args):
     if not bin_contigs:
         log_error(f"No bin files found in {args.bins_dir} with extensions: {extensions}")
         sys.exit(1)
+    contig_len = collect_contig_lengths(args.bins_dir, extensions)
 
     print_section(f"Resolving per-contig taxonomy at rank '{args.rank}'")
     if use_lineage:
         log_info("Using MMseqs2 lineage column (no nodes.dmp needed)")
-        summary = summarize_bin_lineage(bin_contigs, contig_lineage, args.rank)
+        summary = summarize_bin_lineage(bin_contigs, contig_lineage, args.rank,
+                                        contig_len=contig_len)
     else:
         nodes = parse_nodes_dmp(args.nodes_dmp)
         names = parse_names_dmp(args.names_dmp) if args.names_dmp else None
-        summary = summarize_bin_taxa(bin_contigs, contig_taxid, args.rank, nodes, names)
+        summary = summarize_bin_taxa(bin_contigs, contig_taxid, args.rank, nodes,
+                                     names, contig_len=contig_len)
 
-    contig_rows, bin_rows = build_rows(summary, contig_taxid)
+    contig_rows, bin_rows = build_rows(summary, contig_taxid,
+                                       min_foreign_frac=args.min_foreign_frac)
 
     if not args.dry_run:
         print_section("Writing output")

@@ -22,7 +22,7 @@ from ..utils.chimera import parse_gtdbtk_summary, extract_taxonomy_level
 from ..utils.rrna import parse_mimag_rna_summary
 from ..utils.final_report import (
     norm_name, build_report, write_report,
-    parse_chimera_report, parse_contig_taxonomy_bins, parse_ssu_report,
+    parse_chimera_report, parse_gunc_pass, parse_contig_taxonomy_bins, parse_ssu_report,
 )
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
 
@@ -127,6 +127,7 @@ def run(args):
     taxonomy = _load_taxonomy(args.gtdbtk_dir, args.tax_level) if args.gtdbtk_dir else {}
     mimag = _load_mimag(args.mimag_rna_dir) if args.mimag_rna_dir else {}
     chimera = parse_chimera_report(args.chimera_report) if args.chimera_report else {}
+    gunc_pass = parse_gunc_pass(args.chimera_report) if args.chimera_report else {}
     contig = parse_contig_taxonomy_bins(args.contig_taxonomy) if args.contig_taxonomy else {}
     ssu = parse_ssu_report(args.ssu_report) if args.ssu_report else {}
 
@@ -152,7 +153,7 @@ def run(args):
 
     print_section(f"Joining {len(universe):,} genomes")
     rows = build_report(universe, checkm2=checkm2, taxonomy=taxonomy, mimag=mimag,
-                        chimera=chimera, contig=contig, ssu=ssu)
+                        chimera=chimera, contig=contig, ssu=ssu, gunc_pass=gunc_pass)
     write_report(rows, args.output)
     log_info(f"Final report written: {args.output}")
 

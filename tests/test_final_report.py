@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from echidna.utils.final_report import (
-    norm_name, build_report, parse_chimera_report,
+    norm_name, build_report, parse_chimera_report, parse_gunc_pass,
     parse_contig_taxonomy_bins, parse_ssu_report,
 )
 from echidna.commands import final_report
@@ -94,6 +94,32 @@ def test_build_report_missing_sources_are_na():
     r = rows[0]
     assert r['taxonomy'] == 'NA' and r['chimera_risk'] == 'NA'
     assert r['ssu_agree'] == 'NA' and r['concerns'] == ''   # no red flags
+
+
+def test_parse_gunc_pass(tmp_path):
+    f = tmp_path / "chim.tsv"
+    f.write_text("bin\tgunc_pass\tchimera_risk\n"
+                 "binA.fa\tFalse\tHigh\nbinB\tTrue\tClean\nbinC\tN/A\tLow\n")
+    out = parse_gunc_pass(f)
+    assert out == {'binA': 'False', 'binB': 'True', 'binC': 'N/A'}
+
+
+def test_build_report_gunc_mmseqs_concordance():
+    universe = {'agree_chim', 'agree_clean', 'disagree', 'unknown'}
+    gunc_pass = {'agree_chim': 'False', 'agree_clean': 'True',
+                 'disagree': 'True', 'unknown': 'N/A'}
+    contig = {
+        'agree_chim': {'contig_chimera': True, 'n_foreign': '2'},   # GUNC chim + MMseqs chim
+        'agree_clean': {'contig_chimera': False, 'n_foreign': '0'}, # both clean
+        'disagree': {'contig_chimera': True, 'n_foreign': '1'},     # GUNC clean, MMseqs chim
+        'unknown': {'contig_chimera': True, 'n_foreign': '1'},      # GUNC N/A
+    }
+    rows = {r['genome']: r for r in
+            build_report(universe, contig=contig, gunc_pass=gunc_pass)}
+    assert rows['agree_chim']['gunc_mmseqs_concordance'] == 'True'
+    assert rows['agree_clean']['gunc_mmseqs_concordance'] == 'True'
+    assert rows['disagree']['gunc_mmseqs_concordance'] == 'False'
+    assert rows['unknown']['gunc_mmseqs_concordance'] == 'NA'
 
 
 def test_final_report_parser_defaults():

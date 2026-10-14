@@ -49,6 +49,17 @@ def parse_chimera_report(path: Path) -> Dict[str, str]:
     return out
 
 
+def parse_gunc_pass(path: Path) -> Dict[str, str]:
+    """check-chimeras chimera_report.tsv -> {genome: gunc_pass} ('True'/'False'/'N/A').
+    Used for the GUNC-vs-MMseqs concordance column."""
+    out: Dict[str, str] = {}
+    for row in _read_tsv(path):
+        g = norm_name(row.get('bin') or row.get('genome') or '')
+        if g:
+            out[g] = (row.get('gunc_pass') or 'N/A').strip()
+    return out
+
+
 def parse_contig_taxonomy_bins(path: Path) -> Dict[str, Dict]:
     """classify-contigs <out>.bins.tsv -> {genome: {contig_chimera, n_foreign}}."""
     out: Dict[str, Dict] = {}
@@ -126,8 +137,17 @@ REPORT_FIELDS = [
     'genome', 'completeness', 'contamination', 'tier', 'taxonomy',
     'rank_taxon', 'n_16S', 'rrna_complete', 'trna_complete', 'mimag_rna_ok',
     'chimera_risk', 'contig_chimera', 'n_foreign_contigs',
-    'ssu_agree', 'ssu_taxon', 'concerns',
+    'ssu_agree', 'ssu_taxon', 'gunc_mmseqs_concordance', 'concerns',
 ]
+
+
+def _concordance(gunc_pass: Optional[str], contig_chimera) -> str:
+    """GUNC vs MMseqs per-contig agreement on chimeric-or-not: True/False/NA.
+    GUNC says chimeric when pass.GUNC is False; MMseqs when contig_chimera."""
+    if gunc_pass in (None, '', 'N/A', 'NA') or not isinstance(contig_chimera, bool):
+        return 'NA'
+    gunc_chimeric = gunc_pass.strip().lower() in ('false', '0', 'no')
+    return str(gunc_chimeric == contig_chimera)
 
 
 def build_report(
@@ -138,6 +158,7 @@ def build_report(
     chimera: Optional[Dict[str, str]] = None,
     contig: Optional[Dict[str, Dict]] = None,
     ssu: Optional[Dict[str, Dict]] = None,
+    gunc_pass: Optional[Dict[str, str]] = None,
 ) -> List[Dict]:
     """Join all provided per-genome maps (keyed by normalised name) into rows."""
     checkm2 = checkm2 or {}
@@ -146,6 +167,7 @@ def build_report(
     chimera = chimera or {}
     contig = contig or {}
     ssu = ssu or {}
+    gunc_pass = gunc_pass or {}
 
     rows: List[Dict] = []
     for genome in sorted(universe):
@@ -177,6 +199,9 @@ def build_report(
             'n_foreign_contigs': co.get('n_foreign', 'NA') if co else 'NA',
             'ssu_agree': str(su.get('agree', 'NA')) if su else 'NA',
             'ssu_taxon': su.get('ssu_taxon', 'NA') if su else 'NA',
+            'gunc_mmseqs_concordance': _concordance(
+                gunc_pass.get(genome),
+                co.get('contig_chimera') if co else None),
         }
         row['concerns'] = _concerns(row)
         rows.append(row)

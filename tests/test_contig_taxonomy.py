@@ -241,6 +241,39 @@ def test_summarize_bin_lineage_flags_foreign_class():
     assert [c for c, _ in rec['foreign_contigs']] == ['c3']
 
 
+def test_summarize_bin_lineage_foreign_frac_length_weighted():
+    # one foreign contig; tiny by length -> small foreign_frac (likely HGT),
+    # large by length -> big foreign_frac (real split). Majority is by length.
+    bin_contigs = {'b': ['big', 'small']}
+    lineage = {'big': "d_Bacteria;c_Gammaproteobacteria",
+               'small': "d_Bacteria;c_Alphaproteobacteria"}
+    tiny = summarize_bin_lineage(bin_contigs, lineage, 'class',
+                                 contig_len={'big': 990_000, 'small': 10_000})
+    assert tiny['b']['majority_name'] == 'Gammaproteobacteria'
+    assert tiny['b']['foreign_frac'] == pytest.approx(0.01)   # 10k / 1.0M
+
+    big = summarize_bin_lineage(bin_contigs, lineage, 'class',
+                                contig_len={'big': 600_000, 'small': 400_000})
+    assert big['b']['foreign_frac'] == pytest.approx(0.40)
+
+
+def test_build_rows_min_foreign_frac_gates_chimera_flag():
+    bin_contigs = {'b': ['big', 'small']}
+    lineage = {'big': "d_Bacteria;c_Gammaproteobacteria",
+               'small': "d_Bacteria;c_Alphaproteobacteria"}
+    summary = summarize_bin_lineage(bin_contigs, lineage, 'class',
+                                    contig_len={'big': 990_000, 'small': 10_000})
+    # foreign_frac = 0.01; default-ish gate 0.05 -> NOT flagged, but still listed
+    _, bin_rows = classify_contigs.build_rows(summary, {}, min_foreign_frac=0.05)
+    r = bin_rows[0]
+    assert r['chimera_flag'] is False
+    assert r['n_foreign_contigs'] == 1           # foreign still reported
+    assert float(r['foreign_frac']) == pytest.approx(0.01)
+    # a lower gate flags it
+    _, bin_rows2 = classify_contigs.build_rows(summary, {}, min_foreign_frac=0.0)
+    assert bin_rows2[0]['chimera_flag'] is True
+
+
 def test_summarize_bin_lineage_unresolved_above_rank():
     # a contig classified only to phylum is unresolved at class -> no split
     bin_contigs = {'b': ['c1', 'c2']}

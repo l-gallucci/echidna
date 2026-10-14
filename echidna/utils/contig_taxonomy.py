@@ -203,6 +203,19 @@ def assign_contigs_to_bins(bins_dir: Path,
     return bins
 
 
+def collect_contig_lengths(bins_dir: Path,
+                           extensions: List[str]) -> Dict[str, int]:
+    """{contig_name: length} across all bin FASTAs, for length-weighting."""
+    lengths: Dict[str, int] = {}
+    bin_files: List[Path] = []
+    for ext in extensions:
+        bin_files.extend(bins_dir.rglob(f"*.{ext}"))
+    for bin_file in sorted(set(bin_files)):
+        for name, seq in read_fasta_streaming(bin_file):
+            lengths[name] = len(seq)
+    return lengths
+
+
 def _taxon_name(taxid: int, names: Optional[Dict[int, Tuple[str, str]]]) -> str:
     if names and taxid in names:
         return names[taxid][1]
@@ -214,6 +227,7 @@ def _summarize_bins(
     contig_key: Dict[str, object],
     label_fn: Callable[[object], str],
     target_rank: str,
+    contig_len: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Dict]:
     """
     Shared core. ``contig_key`` maps each contig to a hashable rank-level key
@@ -221,35 +235,42 @@ def _summarize_bins(
     taxid (nodes.dmp path) or a taxon-name string (lineage path); ``label_fn``
     turns a key into its display name.
 
-    Like MAGpurify2's taxonomy module, the bin's MAJORITY rank-taxon (most
-    contigs) is its identity and the remaining resolved contigs are reported as
-    foreign/minority contigs - the likely contaminants - so a single misplaced
-    contig is named, not just counted.
+    Like MAGpurify2's taxonomy module, the bin's MAJORITY rank-taxon is its
+    identity and the remaining resolved contigs are the foreign/minority ones -
+    the likely contaminants. When ``contig_len`` is given, the majority and the
+    foreign fraction are weighted by contig LENGTH (bp); otherwise by contig
+    count. ``foreign_frac`` lets a downstream caller tell a tiny foreign tail (a
+    few genes / one short contig, likely HGT) from a substantial split.
     """
+    use_len = contig_len is not None
     out: Dict[str, Dict] = {}
     for bin_name, contigs in bin_contigs.items():
         per_contig: Dict[str, Tuple[Optional[object], str]] = {}
         keys: Set[object] = set()
-        key_count: Dict[object, int] = {}
+        key_weight: Dict[object, float] = {}
         for contig in contigs:
             key = contig_key.get(contig)
             if key is None:
                 per_contig[contig] = (None, 'unresolved')
             else:
                 keys.add(key)
-                key_count[key] = key_count.get(key, 0) + 1
+                w = float(contig_len.get(contig, 0)) if use_len else 1.0
+                key_weight[key] = key_weight.get(key, 0.0) + w
                 per_contig[contig] = (key, label_fn(key))
 
-        # Majority key = the bin's identity (ties broken deterministically on the
-        # display label). Everything else resolved is foreign.
+        # Majority key = the bin's identity (by length when available, else by
+        # count; ties broken deterministically on the display label).
         majority_key: Optional[object] = None
-        if key_count:
-            majority_key = max(sorted(key_count, key=label_fn),
-                               key=key_count.get)
+        if key_weight:
+            majority_key = max(sorted(key_weight, key=label_fn),
+                               key=key_weight.get)
         foreign_contigs = sorted(
             (c, v[1]) for c, v in per_contig.items()
             if v[0] is not None and v[0] != majority_key
         )
+        total_w = sum(key_weight.values())
+        foreign_w = total_w - key_weight.get(majority_key, 0.0) if majority_key is not None else 0.0
+        foreign_frac = (foreign_w / total_w) if total_w > 0 else 0.0
 
         out[bin_name] = {
             'n_contigs': len(contigs),
@@ -261,6 +282,7 @@ def _summarize_bins(
             'majority_name': (label_fn(majority_key)
                               if majority_key is not None else 'N/A'),
             'foreign_contigs': foreign_contigs,
+            'foreign_frac': foreign_frac,
             'per_contig': per_contig,
         }
     n_chimeric = sum(1 for r in out.values() if r['chimera'])
@@ -275,6 +297,7 @@ def summarize_bin_taxa(
     target_rank: str,
     nodes: Dict[int, Tuple[int, str]],
     names: Optional[Dict[int, Tuple[str, str]]] = None,
+    contig_len: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Dict]:
     """
     Resolve each contig's taxid up to ``target_rank`` via nodes.dmp (Kraken2 /
@@ -286,13 +309,15 @@ def summarize_bin_taxa(
         for contigs in bin_contigs.values() for contig in contigs
     }
     return _summarize_bins(
-        bin_contigs, contig_key, lambda t: _taxon_name(t, names), target_rank)
+        bin_contigs, contig_key, lambda t: _taxon_name(t, names), target_rank,
+        contig_len=contig_len)
 
 
 def summarize_bin_lineage(
     bin_contigs: Dict[str, List[str]],
     contig_lineage: Dict[str, str],
     target_rank: str,
+    contig_len: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Dict]:
     """
     Resolve each contig to its ``target_rank`` taxon name from a lineage string
@@ -303,4 +328,5 @@ def summarize_bin_lineage(
         contig: extract_rank_from_lineage(contig_lineage.get(contig, ''), target_rank)
         for contigs in bin_contigs.values() for contig in contigs
     }
-    return _summarize_bins(bin_contigs, contig_key, lambda s: s, target_rank)
+    return _summarize_bins(bin_contigs, contig_key, lambda s: s, target_rank,
+                           contig_len=contig_len)

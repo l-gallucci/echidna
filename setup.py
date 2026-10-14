@@ -11,6 +11,7 @@ import re
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
     open("echidna/__init__.py").read(),
+    re.MULTILINE,
 )
 version = {"__version__": _version_match.group(1) if _version_match else "0.0.0"}
 

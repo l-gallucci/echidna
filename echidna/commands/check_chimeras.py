@@ -40,6 +40,7 @@ from ..utils.chimera import (
     assess_chimera_risk,
 )
 from ..utils.checkm2 import parse_quality_report
+from ..utils.names import canonical_name, match_report
 from ..utils.validation import validate_dir_exists
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
 
@@ -83,6 +84,31 @@ def _load_contamination(checkm2_file: Path) -> Dict[str, float]:
 # Core logic
 # ---------------------------------------------------------------------------
 
+def _load_contig_foreign_frac(path: Path) -> Dict[str, float]:
+    """classify-contigs <out>.bins.tsv -> {bin: foreign_frac}."""
+    out: Dict[str, float] = {}
+    with open(path, newline='') as f:
+        for row in csv.DictReader(f, delimiter='\t'):
+            b = (row.get('bin') or '').strip()
+            if not b:
+                continue
+            try:
+                out[b] = float(row.get('foreign_frac') or 0.0)
+            except ValueError:
+                out[b] = 0.0
+    return out
+
+
+def _warn_unmatched(bin_names: List[str], source_keys, label: str,
+                    strip: List[str]) -> None:
+    """Warn (not fail) about bins with no match in a source, by canonical name."""
+    _, unmatched = match_report(bin_names, source_keys, strip)
+    if unmatched:
+        shown = ', '.join(unmatched[:8]) + ('...' if len(unmatched) > 8 else '')
+        log_warning(f"{len(unmatched):,}/{len(bin_names):,} bins have NO {label} "
+                    f"match (signal will be N/A for them): {shown}")
+
+
 def run_chimera_check(
     bins_dir: Path,
     output_file: Path,
@@ -90,76 +116,82 @@ def run_chimera_check(
     gtdbtk_dir: Optional[Path],
     checkm2_file: Optional[Path],
     gunc_dir: Optional[Path],
+    contig_taxonomy_file: Optional[Path],
     gc_window: int,
     gc_step: int,
     taxonomy_level: str,
-    gunc_tax_rank: str,
-    gunc_min_genes: int,
+    name_strip: List[str],
     dry_run: bool,
 ) -> Dict[str, int]:
     """
-    Run chimera detection for all bins in bins_dir.
+    Run chimera detection for all bins in bins_dir. Returns {risk_level: count}.
 
-    Returns a dict of {risk_level: count}.
+    Signals (all optional): GC (from the FASTA), CheckM2 contamination, GTDB-Tk
+    placement warning, GUNC pass/fail + CSS, and per-contig taxonomy foreign
+    fraction from classify-contigs (MMseqs). Every source is joined by a
+    canonical genome name (see utils.names) and unmatched bins are warned about.
     """
     print_section("Loading auxiliary data")
 
-    taxonomy: Dict[str, Dict] = {}
-    if gtdbtk_dir:
-        taxonomy = _load_taxonomy(gtdbtk_dir)
-        if taxonomy:
-            log_info(f"Taxonomy loaded for {len(taxonomy):,} genomes")
+    taxonomy: Dict[str, Dict] = _load_taxonomy(gtdbtk_dir) if gtdbtk_dir else {}
+    if taxonomy:
+        log_info(f"Taxonomy loaded for {len(taxonomy):,} genomes")
 
-    contamination_map: Dict[str, float] = {}
-    if checkm2_file:
-        contamination_map = _load_contamination(checkm2_file)
+    contamination_map: Dict[str, float] = (
+        _load_contamination(checkm2_file) if checkm2_file else {})
+    if contamination_map:
         log_info(f"CheckM2 contamination loaded for {len(contamination_map):,} genomes")
 
     gunc_map: Dict[str, Dict] = {}
-    gunc_contig_map: Dict[str, Dict] = {}
     if gunc_dir:
-        from ..utils.chimera import parse_gunc_output, parse_gunc_contig_assignments
+        from ..utils.chimera import parse_gunc_output
         gunc_map = parse_gunc_output(gunc_dir)
         if gunc_map:
             log_info(f"GUNC results loaded for {len(gunc_map):,} genomes")
-        gunc_contig_map = parse_gunc_contig_assignments(
-            gunc_dir, rank=gunc_tax_rank, min_genes=gunc_min_genes)
-        if gunc_contig_map:
-            log_info(
-                f"GUNC per-contig taxonomy loaded for {len(gunc_contig_map):,} "
-                f"genomes (rank {gunc_tax_rank})"
-            )
-        else:
-            log_info(
-                "No GUNC per-contig taxonomy files (*.contig_assignments.tsv) "
-                "found - rerun run-gunc with --contig-taxonomy-output to enable "
-                "the multi-clade signal"
-            )
+
+    contig_frac_map: Dict[str, float] = (
+        _load_contig_foreign_frac(contig_taxonomy_file) if contig_taxonomy_file else {})
+    if contig_frac_map:
+        log_info(f"Per-contig taxonomy (MMseqs) loaded for {len(contig_frac_map):,} bins")
+
+    # Canonicalise all source keys once so the per-bin join is naming-robust.
+    def _canon_map(m):
+        return {canonical_name(k, name_strip): v for k, v in m.items()}
+    tax_c = _canon_map(taxonomy)
+    contam_c = _canon_map(contamination_map)
+    gunc_c = _canon_map(gunc_map)
+    frac_c = _canon_map(contig_frac_map)
 
     print_section("Scanning bin files")
-
     bin_files: List[Path] = []
     for ext in extensions:
         bin_files.extend(bins_dir.rglob(f"*.{ext}"))
     bin_files = sorted(set(bin_files))
-
     if not bin_files:
         log_error(f"No bin files found in {bins_dir} with extensions: {extensions}")
         return {'risk': {}, 'gunc': {'pass': 0, 'fail': 0, 'na': 0}, 'gunc_used': bool(gunc_dir)}
-
     log_info(f"Found {len(bin_files):,} bin file(s)")
 
-    print_section("Analysing chimera risk per bin")
+    bin_names = [b.stem for b in bin_files]
+    if taxonomy:
+        _warn_unmatched(bin_names, taxonomy.keys(), "GTDB-Tk", name_strip)
+    if contamination_map:
+        _warn_unmatched(bin_names, contamination_map.keys(), "CheckM2", name_strip)
+    if gunc_map:
+        _warn_unmatched(bin_names, gunc_map.keys(), "GUNC", name_strip)
+    if contig_frac_map:
+        _warn_unmatched(bin_names, contig_frac_map.keys(), "contig-taxonomy", name_strip)
 
+    print_section("Analysing chimera risk per bin")
     rows: List[Dict] = []
     risk_counts: Dict[str, int] = {'High': 0, 'Medium': 0, 'Low': 0, 'Clean': 0}
     gunc_counts: Dict[str, int] = {'pass': 0, 'fail': 0, 'na': 0}
 
     for bin_file in bin_files:
         bin_name = bin_file.stem
+        key = canonical_name(bin_name, name_strip)
         log_info(f"\n  [{bin_name}]")
 
-        # GC analysis
         try:
             gc_data = analyze_bin_gc(bin_file, gc_window, gc_step)
         except Exception as e:
@@ -168,28 +200,22 @@ def run_chimera_check(
 
         bin_stats = gc_data['bin_gc_stats']
         windowed_stats = gc_data.get('windowed_gc_stats')
-
         gc_delta = bin_stats.get('delta') or 0.0
         gc_cv = bin_stats.get('cv') or 0.0
         windowed_delta = windowed_stats.get('delta') if windowed_stats else None
         gc_outlier = gc_outlier_contigs(
             gc_data['per_contig_gc'], gc_data['per_contig_len'])
 
-        # Taxonomy
-        tax_record = taxonomy.get(bin_name, {})
+        tax_record = tax_c.get(key, {})
         classification = tax_record.get('classification', '')
         taxon = extract_taxonomy_level(classification, taxonomy_level) if classification else 'N/A'
         tax_warn = has_taxonomy_warning(tax_record) if tax_record else False
 
-        # Contamination
-        contamination = contamination_map.get(bin_name)
+        contamination = contam_c.get(key)
 
-        # GUNC gene-level taxonomic consistency
-        gunc_record = gunc_map.get(bin_name, {})
+        gunc_record = gunc_c.get(key, {})
         gunc_fail = (not gunc_record['pass_gunc']) if gunc_record else None
         gunc_css = gunc_record.get('css') if gunc_record else None
-        gunc_contig_record = gunc_contig_map.get(bin_name, {})
-        gunc_contig_clades = gunc_contig_record.get('n_clades')
         if gunc_dir:
             if not gunc_record:
                 gunc_counts['na'] += 1
@@ -198,7 +224,8 @@ def run_chimera_check(
             else:
                 gunc_counts['fail'] += 1
 
-        # Risk score
+        contig_foreign_frac = frac_c.get(key)
+
         risk, reasons = assess_chimera_risk(
             gc_delta=gc_delta,
             gc_cv=gc_cv,
@@ -208,15 +235,13 @@ def run_chimera_check(
             taxonomy_warning=tax_warn,
             gunc_fail=gunc_fail,
             gunc_css=gunc_css,
-            gunc_contig_clades=gunc_contig_clades,
+            contig_foreign_frac=contig_foreign_frac,
             gc_outlier=gc_outlier,
         )
         risk_counts[risk] = risk_counts.get(risk, 0) + 1
 
         log_info(
-            f"  Contigs={gc_data['n_contigs']}  "
-            f"GC_delta={gc_delta * 100:.1f}%  "
-            f"Circular={gc_data['is_circular_candidate']}  "
+            f"  Contigs={gc_data['n_contigs']}  GC_delta={gc_delta * 100:.1f}%  "
             f"Contamination={'N/A' if contamination is None else f'{contamination:.1f}%'}  "
             f"Risk={risk}"
         )
@@ -240,8 +265,8 @@ def run_chimera_check(
             'gtdbtk_warning': tax_warn,
             'gunc_pass': ('N/A' if not gunc_record else gunc_record['pass_gunc']),
             'gunc_css': ('N/A' if gunc_css is None else f"{gunc_css:.3f}"),
-            'gunc_contig_clades': ('N/A' if gunc_contig_clades is None
-                                   else gunc_contig_clades),
+            'contig_foreign_frac': ('N/A' if contig_foreign_frac is None
+                                    else f"{contig_foreign_frac:.4f}"),
             'chimera_risk': risk,
             'reasons': ' | '.join(reasons),
         })
@@ -251,7 +276,7 @@ def run_chimera_check(
             'bin', 'n_contigs', 'is_circular_candidate',
             'gc_mean_pct', 'gc_delta_pct', 'gc_cv_pct', 'windowed_gc_delta_pct',
             'checkm2_contamination', 'gtdbtk_taxonomy', 'gtdbtk_warning',
-            'gunc_pass', 'gunc_css', 'gunc_contig_clades',
+            'gunc_pass', 'gunc_css', 'contig_foreign_frac',
             'chimera_risk', 'reasons',
         ]
         with open(output_file, 'w', newline='') as f:
@@ -274,51 +299,40 @@ def register_parser(subparsers):
         help='Detect chimeric MAGs and circular contigs using GC and taxonomy signals',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Signal interpretation (gene-level taxonomy drives; GC only corroborates)
+Signal scoring (points may be fractional)
 ---------------------
-  GUNC per-contig taxonomy  (needs run-gunc --contig-taxonomy-output)
-    contigs span ≥ 2 clades  HARD FLAG -> risk forced to High at any rank
-                             (contigs of different taxonomy = contamination,
-                             not accepted; tune granularity with --gunc-tax-rank)
-  GUNC gene-level (aggregate)
-    pass.GUNC = False        +3
-    clade_separation > 0.45  +2
+  GUNC gene-level (authoritative; pass.GUNC is already proportion-aware)
+    pass.GUNC = False                 +3   (nothing else from GUNC)
+    pass.GUNC = True & CSS > 0.45      +1
+  Per-contig taxonomy foreign LENGTH fraction (--contig-taxonomy, from MMseqs/
+  classify-contigs; a tiny tail = likely HGT, a big fraction = chimera)
+    >= 10 %  +3     >= 5 %  +2     > 0 %  +0.5
   CheckM2 contamination
-    > 10 %  +3     > 5 %  +2
-  GC delta between contigs (multi-contig bins; max-min, can be set by one short
-  outlier — the driving contigs + lengths are shown in the reasons column)
-    > 10 %  +2     > 5 %  +1
-  Windowed GC delta (circular contigs ≥ 100 kbp) — weakest, a prophage/island/
-  GC-skew looks identical to a chimeric junction
-    > 15 %  +1
-  GTDB-Tk warning (any, or MSA percent < 10 %)   +1
+    > 10 %  +1     (<= 10 % tolerated: HQ MAGs carry a little)
+  GC delta between contigs (ours, from FASTA; noisy, one short outlier can set it)
+    > 10 %  +1     > 5 %  +0.5
+  Windowed GC delta (circular contigs; weakest - prophage/island/skew look same)
+    > 15 %  +0.5
+  GTDB-Tk warning (any, or MSA < 10 %)   +0.5
 
-  Risk = High (≥5) / Medium (≥2) / Low (≥1) / Clean (0), except the per-contig
-  taxonomy hard flag above, which forces High on its own. GC alone never reaches
-  Medium: it needs a taxonomy or contamination signal to corroborate.
+  Risk = High (≥3) / Medium (≥2) / Low (≥0.5) / Clean (0). GC alone tops out at
+  1.5 -> stays Low. GUNC fail or >=10 % foreign length -> High.
 
 Examples
 --------
-  # Basic GC-only check
-  echidna check-chimeras \\
-    --bins-dir bins/ \\
-    --output chimera_report.tsv
+  # GC-only check
+  echidna check-chimeras --bins-dir bins/ --output chimera_report.tsv
 
-  # Full check with GTDB-Tk + CheckM2
+  # Full check with all signals
   echidna check-chimeras \\
-    --bins-dir bins/ \\
-    --output chimera_report.tsv \\
-    --gtdbtk-dir gtdbtk_results/ \\
-    --checkm2-report checkm2/quality_report.tsv
+    --bins-dir bins/ --output chimera_report.tsv \\
+    --gtdbtk-dir gtdbtk_results/ --checkm2-report checkm2/quality_report.tsv \\
+    --gunc-dir gunc_results/ \\
+    --contig-taxonomy contig_taxonomy.tsv.bins.tsv
 
-  # Finer GC resolution for large circular genomes
-  echidna check-chimeras \\
-    --bins-dir bins/ \\
-    --output chimera_report.tsv \\
-    --gc-window 2000 --gc-step 500
-
-  # Dry-run (print to terminal, no file written)
-  echidna check-chimeras --bins-dir bins/ --dry-run
+  # Tolerate a naming suffix some tools add
+  echidna check-chimeras --bins-dir bins/ --checkm2-report q.tsv \\
+    --name-strip .contigs,_genomic
         """
     )
 
@@ -333,18 +347,14 @@ Examples
     parser.add_argument('--checkm2-report', type=Path,
                         help='CheckM2 quality_report.tsv (adds contamination signal)')
     parser.add_argument('--gunc-dir', type=Path,
-                        help='GUNC output directory (adds gene-level clade-consistency signal). '
-                             'If it contains *.contig_assignments.tsv (from run-gunc '
-                             '--contig-taxonomy-output), also adds the per-contig '
-                             'multi-clade signal.')
-    parser.add_argument('--gunc-tax-rank', default='phylum',
-                        choices=['kingdom', 'phylum', 'class', 'order', 'family',
-                                 'genus', 'species'],
-                        help='Rank at which to count distinct per-contig GUNC '
-                             'clades (default: phylum)')
-    parser.add_argument('--gunc-min-genes', type=int, default=3,
-                        help='Min genes a contig needs at the chosen rank before '
-                             'its GUNC clade is counted (default: 3; filters strays)')
+                        help='GUNC output directory (adds gene-level pass/fail + CSS signal)')
+    parser.add_argument('--contig-taxonomy', type=Path,
+                        help='classify-contigs <output>.bins.tsv (adds the per-contig '
+                             'taxonomy foreign-fraction signal, from MMseqs/Kraken2/Kaiju)')
+    parser.add_argument('--name-strip', default='',
+                        help='Comma-separated suffixes to strip from genome names when '
+                             'joining sources (e.g. ".contigs,_genomic"); FASTA extensions '
+                             'are always stripped')
 
     # GC window parameters
     parser.add_argument('--gc-window', type=int, default=5000,
@@ -379,6 +389,10 @@ def run(args):
     if args.gunc_dir:
         validate_dir_exists(args.gunc_dir, "GUNC directory")
 
+    if args.contig_taxonomy and not args.contig_taxonomy.exists():
+        log_error(f"contig-taxonomy file not found: {args.contig_taxonomy}")
+        sys.exit(1)
+
     if args.gc_step >= args.gc_window:
         log_warning(
             f"--gc-step ({args.gc_step}) >= --gc-window ({args.gc_window}); "
@@ -386,6 +400,7 @@ def run(args):
         )
 
     extensions = [e.strip() for e in args.extensions.split(',')]
+    name_strip = [s.strip() for s in args.name_strip.split(',') if s.strip()]
 
     print_header("Echidna - Chimera Check")
 
@@ -396,11 +411,11 @@ def run(args):
         gtdbtk_dir=args.gtdbtk_dir,
         checkm2_file=args.checkm2_report,
         gunc_dir=args.gunc_dir,
+        contig_taxonomy_file=args.contig_taxonomy,
         gc_window=args.gc_window,
         gc_step=args.gc_step,
         taxonomy_level=args.taxonomy_level,
-        gunc_tax_rank=args.gunc_tax_rank,
-        gunc_min_genes=args.gunc_min_genes,
+        name_strip=name_strip,
         dry_run=args.dry_run,
     )
 

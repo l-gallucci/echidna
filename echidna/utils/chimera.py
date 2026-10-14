@@ -321,100 +321,109 @@ def assess_chimera_risk(
     taxonomy_warning: bool = False,
     gunc_fail: Optional[bool] = None,
     gunc_css: Optional[float] = None,
-    gunc_contig_clades: Optional[int] = None,
+    contig_foreign_frac: Optional[float] = None,
     gc_outlier: Optional[Dict] = None,
 ) -> Tuple[str, List[str]]:
     """
     Assess chimera risk for a bin/MAG from multiple independent signals.
 
-    Gene-level taxonomy (GUNC) is the strongest signal and drives the score; GC
-    heterogeneity is noisy (a single short contig can set the max-min delta) so
-    it corroborates rather than drives — on its own GC never reaches Medium.
+    Gene-level taxonomy (GUNC pass/fail) and per-contig taxonomy (MMseqs, via
+    classify-contigs) drive the score; GC heterogeneity is noisy (a single short
+    contig can set the max-min delta) so it only corroborates and never reaches
+    Medium on its own.
 
-    Scoring:
-      GUNC per-contig taxonomy (needs gunc --contig_taxonomy_output)
-        contigs span >= 2 clades → HARD FLAG: risk forced to High regardless of
-        the other signals. Contigs of different taxonomy in one bin are
-        contamination at any rank; this is the single strongest signal.
-      GUNC gene-level taxonomic inconsistency (aggregate)
-        pass.GUNC = False → +3   (genes span multiple clades)
-        clade_separation_score > 0.45 → +2  (when not already failed)
+    GUNC's own pass.GUNC is already proportion-aware (it fails only on
+    substantial, well-separated contamination), so we trust it and do not pile
+    extra points on top of a fail. The per-contig signal is weighted by the
+    LENGTH fraction of foreign contigs: a tiny fraction (a few genes / one short
+    contig) is likely HGT, not a chimera, so it scores low; a substantial
+    fraction scores high.
+
+    Scoring (points, may be fractional):
+      GUNC gene-level (authoritative)
+        pass.GUNC = False                       → +3  (nothing else from GUNC)
+        pass.GUNC = True & CSS > 0.45            → +1
+      Per-contig taxonomy foreign LENGTH fraction (MMseqs / classify-contigs)
+        >= 10 %                                 → +3
+        >=  5 %                                 → +2
+        >   0 %                                 → +0.5 (minor; possible HGT)
       CheckM2 contamination
-        > 10 %        → +3    > 5 %         → +2
-      GC heterogeneity between contigs (multi-contig bins)
-        delta > 10 %  → +2    delta > 5 %   → +1
-      Windowed GC variation along a circular contig (weakest: prophage/GC-skew
-      look the same as a chimeric junction here)
-        delta > 15 %  → +1    (delta > 8 % no longer scores)
+        > 10 %                                  → +1   (<=10 % tolerated: HQ)
+      GC heterogeneity between contigs (ours, from FASTA; noisy)
+        delta > 10 %                            → +1    delta > 5 % → +0.5
+      Windowed GC along a circular contig (ours; weakest)
+        delta > 15 %                            → +0.5
       GTDB-Tk placement warning
-        any           → +1
+        any                                     → +0.5
 
     Risk levels  →  score thresholds
-      High   ≥ 5
-      Medium ≥ 2
-      Low    ≥ 1
-      Clean    0
+      High   ≥ 3      Medium ≥ 2      Low ≥ 0.5      Clean 0
+    (GC alone tops out at 1.5 → stays Low; GUNC fail or >=10 % foreign → High.)
     """
     reasons: List[str] = []
-    score = 0
+    score = 0.0
 
+    # GC inter-contig (ours, from FASTA; noisy, single outlier can set it)
     if n_contigs > 1:
         if gc_delta > 0.10:
-            score += 2
+            score += 1.0
             reasons.append(f"High inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
                            + _gc_outlier_note(gc_outlier))
         elif gc_delta > 0.05:
-            score += 1
+            score += 0.5
             reasons.append(f"Moderate inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
                            + _gc_outlier_note(gc_outlier))
 
-    if windowed_gc_delta is not None:
-        if windowed_gc_delta > 0.15:
-            score += 1
-            reasons.append(
-                f"Windowed GC variation along circular contig "
-                f"(delta={windowed_gc_delta * 100:.1f}%); weak alone - "
-                f"prophage/island/GC-skew look the same, corroborate with GUNC"
-            )
+    # Windowed GC (ours; weakest - prophage/island/GC-skew look the same)
+    if windowed_gc_delta is not None and windowed_gc_delta > 0.15:
+        score += 0.5
+        reasons.append(
+            f"Windowed GC variation along circular contig "
+            f"(delta={windowed_gc_delta * 100:.1f}%); weak alone"
+        )
 
-    if contamination is not None:
-        if contamination > 10.0:
-            score += 3
-            reasons.append(f"High CheckM2 contamination ({contamination:.1f}%)")
-        elif contamination > 5.0:
-            score += 2
-            reasons.append(f"Elevated CheckM2 contamination ({contamination:.1f}%)")
+    # CheckM2 contamination (only > 10 %; HQ MAGs tolerate a little)
+    if contamination is not None and contamination > 10.0:
+        score += 1.0
+        reasons.append(f"High CheckM2 contamination ({contamination:.1f}%)")
 
+    # GTDB-Tk placement warning
     if taxonomy_warning:
-        score += 1
+        score += 0.5
         reasons.append("GTDB-Tk placement warning (low confidence or poor MSA)")
 
-    # GUNC gene-level taxonomic consistency (orthogonal to GC/contamination)
+    # GUNC gene-level (authoritative; pass.GUNC is already proportion-aware)
     if gunc_fail is True:
-        score += 3
+        score += 3.0
         if gunc_css is not None:
             reasons.append(f"GUNC fail: genes span multiple clades (CSS={gunc_css:.2f})")
         else:
             reasons.append("GUNC fail: genes span multiple clades")
     elif gunc_css is not None and gunc_css > 0.45:
-        score += 2
+        score += 1.0
         reasons.append(f"Elevated GUNC clade separation score (CSS={gunc_css:.2f})")
 
-    # GUNC per-contig taxonomy: contigs resolving to >=2 clades is a direct
-    # per-contig taxonomic split. Contigs of different taxonomy in one bin are
-    # contamination at any rank, so this forces High regardless of the rest.
-    if gunc_contig_clades is not None and gunc_contig_clades >= 2:
-        reasons.append(
-            f"GUNC per-contig taxonomy: contigs span {gunc_contig_clades} "
-            f"clades - taxonomic contamination (hard flag)"
-        )
-        return 'High', reasons
+    # Per-contig taxonomy, length-weighted (MMseqs via classify-contigs)
+    if contig_foreign_frac is not None and contig_foreign_frac > 0:
+        pct = contig_foreign_frac * 100
+        if contig_foreign_frac >= 0.10:
+            score += 3.0
+            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
+                           f"contigs (MMseqs) - substantial, likely chimeric")
+        elif contig_foreign_frac >= 0.05:
+            score += 2.0
+            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
+                           f"contigs (MMseqs) - elevated")
+        else:
+            score += 0.5
+            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
+                           f"contigs (MMseqs) - minor (possible HGT/single contig)")
 
-    if score >= 5:
+    if score >= 3:
         return 'High', reasons
     elif score >= 2:
         return 'Medium', reasons
-    elif score >= 1:
+    elif score >= 0.5:
         return 'Low', reasons
     else:
         return 'Clean', reasons

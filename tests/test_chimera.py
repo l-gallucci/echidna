@@ -135,52 +135,55 @@ def test_assess_chimera_risk_clean():
 
 
 def test_assess_chimera_risk_gc_high():
+    # inter-contig GC >10% is now +1 -> Low on its own (never Medium)
     risk, reasons = _risk(gc_delta=0.12, n_contigs=3)
-    assert risk == "Medium"           # +2 for high inter-contig GC
+    assert risk == "Low"
     assert any("GC heterogeneity" in r for r in reasons)
 
 
-def test_assess_chimera_risk_gunc_fail_adds_three():
+def test_assess_chimera_risk_gunc_fail_is_high():
+    # GUNC fail is +3 -> High on its own (authoritative gene-level signal)
     risk, reasons = _risk(gunc_fail=True, gunc_css=0.82)
-    assert risk == "Medium"           # +3
+    assert risk == "High"
     assert any("GUNC fail" in r for r in reasons)
 
 
-def test_assess_chimera_risk_gunc_css_elevated():
-    risk, reasons = _risk(gunc_fail=False, gunc_css=0.5)
+def test_assess_chimera_risk_gunc_css_elevated_is_low():
+    risk, reasons = _risk(gunc_fail=False, gunc_css=0.5)   # +1
+    assert risk == "Low"
     assert any("clade separation" in r.lower() for r in reasons)
 
 
+def test_contamination_only_over_10_and_hq_tolerated():
+    assert _risk(contamination=12.0)[0] == "Low"     # +1 -> Low
+    assert _risk(contamination=7.0)[0] == "Clean"    # <=10% tolerated -> 0
+
+
+def test_gtdbtk_warning_half_point():
+    risk, _ = _risk(taxonomy_warning=True)            # +0.5 -> Low
+    assert risk == "Low"
+
+
 def test_assess_chimera_risk_high_combo():
-    # high GC (+2) + GUNC fail (+3) = 5 -> High
+    # GC (+1) + GUNC fail (+3) -> High
     risk, _ = _risk(gc_delta=0.2, n_contigs=2, gunc_fail=True, gunc_css=0.9)
     assert risk == "High"
 
 
 def test_windowed_gc_alone_is_low_not_medium():
-    # Regression: a circular contig with only high windowed GC (prophage/skew)
-    # must NOT reach Medium on its own (+1 now, was +3).
+    # a circular contig with only high windowed GC (+0.5) stays Low
     risk, reasons = _risk(windowed_gc_delta=0.169, n_contigs=1)
     assert risk == "Low"
     assert any("Windowed GC" in r for r in reasons)
 
 
-def test_gunc_contig_multiclade_is_hard_flag_high():
-    # contigs spanning >=2 clades is a hard flag -> High on its own, any rank
-    risk, reasons = _risk(gunc_contig_clades=3)
-    assert risk == "High"
-    assert any("span 3 clades" in r for r in reasons)
-    assert any("hard flag" in r for r in reasons)
-
-    # even just 2 clades with nothing else -> High
-    risk2, _ = _risk(gunc_contig_clades=2)
-    assert risk2 == "High"
-
-
-def test_gunc_contig_single_clade_no_score():
-    risk, reasons = _risk(gunc_contig_clades=1)
-    assert risk == "Clean"
-    assert not any("per-contig" in r for r in reasons)
+def test_contig_foreign_frac_tiers():
+    # length-weighted per-contig foreign fraction (MMseqs via classify-contigs)
+    assert _risk(contig_foreign_frac=0.12)[0] == "High"    # >=10% +3
+    assert _risk(contig_foreign_frac=0.07)[0] == "Medium"  # >=5%  +2
+    assert _risk(contig_foreign_frac=0.02)[0] == "Low"     # >0%   +0.5
+    risk, reasons = _risk(contig_foreign_frac=0.0)
+    assert risk == "Clean" and not any("foreign" in r for r in reasons)
 
 
 def test_gc_outlier_note_in_reason():
@@ -190,3 +193,25 @@ def test_gc_outlier_note_in_reason():
     joined = " ".join(reasons)
     assert "contigA" in joined and "contigB" in joined
     assert "1,200bp" in joined          # short outlier length shown for review
+
+
+def test_check_chimeras_loads_contig_foreign_frac(tmp_path):
+    import argparse
+    from echidna.commands import check_chimeras
+    f = tmp_path / "ct.bins.tsv"
+    f.write_text("bin\tchimera_flag\tforeign_frac\tn_foreign_contigs\n"
+                 "binA\tTrue\t0.1200\t2\nbinB\tFalse\t0.0000\t0\n")
+    out = check_chimeras._load_contig_foreign_frac(f)
+    assert out['binA'] == pytest.approx(0.12) and out['binB'] == 0.0
+
+    # parser gained --contig-taxonomy / --name-strip and dropped the GUNC per-contig flags
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers()
+    check_chimeras.register_parser(sub)
+    args = parser.parse_args(['check-chimeras', '--bins-dir', 'bins',
+                              '--contig-taxonomy', 'ct.bins.tsv',
+                              '--name-strip', '.contigs,_genomic'])
+    assert str(args.contig_taxonomy) == 'ct.bins.tsv'
+    assert args.name_strip == '.contigs,_genomic'
+    with pytest.raises(SystemExit):
+        parser.parse_args(['check-chimeras', '--bins-dir', 'b', '--gunc-tax-rank', 'order'])
