@@ -309,14 +309,15 @@ Signal scoring (points may be fractional)
     >= 10 %  +3     >= 5 %  +2     > 0 %  +0.5
   CheckM2 contamination
     > 10 %  +1     (<= 10 % tolerated: HQ MAGs carry a little)
+  GTDB-Tk warning ("taxonomy"; any, or MSA < 10 %)   +1
   GC delta between contigs (ours, from FASTA; noisy, one short outlier can set it)
-    > 10 %  +1     > 5 %  +0.5
+    > 10 %  +0.5     > 5 %  +0.25
   Windowed GC delta (circular contigs; weakest - prophage/island/skew look same)
-    > 15 %  +0.5
-  GTDB-Tk warning (any, or MSA < 10 %)   +0.5
+    > 15 %  +0.25
 
-  Risk = High (≥3) / Medium (≥2) / Low (≥0.5) / Clean (0). GC alone tops out at
-  1.5 -> stays Low. GUNC fail or >=10 % foreign length -> High.
+  Risk = High (≥3) / Medium (≥2) / Low (≥0.5) / Clean (0). So: contam alone =Low;
+  contam+warning =Medium; GC+minor-foreign+warning =Medium; with foreign >=5%
+  =High; GUNC fail or foreign >=10% =High; GC alone =Low.
 
 Examples
 --------

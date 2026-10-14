@@ -349,16 +349,19 @@ def assess_chimera_risk(
         >   0 %                                 → +0.5 (minor; possible HGT)
       CheckM2 contamination
         > 10 %                                  → +1   (<=10 % tolerated: HQ)
+      GTDB-Tk placement warning ("taxonomy")
+        any                                     → +1
       GC heterogeneity between contigs (ours, from FASTA; noisy)
-        delta > 10 %                            → +1    delta > 5 % → +0.5
+        delta > 10 %                            → +0.5    delta > 5 % → +0.25
       Windowed GC along a circular contig (ours; weakest)
-        delta > 15 %                            → +0.5
-      GTDB-Tk placement warning
-        any                                     → +0.5
+        delta > 15 %                            → +0.25
 
     Risk levels  →  score thresholds
       High   ≥ 3      Medium ≥ 2      Low ≥ 0.5      Clean 0
-    (GC alone tops out at 1.5 → stays Low; GUNC fail or >=10 % foreign → High.)
+
+    So: contamination alone → Low; contamination + GTDB warning → Medium;
+    GC + minor foreign + GTDB warning → Medium; the same with foreign >= 5 %
+    (substantial) → High; GUNC fail or foreign >= 10 % → High; GC alone → Low.
     """
     reasons: List[str] = []
     score = 0.0
@@ -366,17 +369,17 @@ def assess_chimera_risk(
     # GC inter-contig (ours, from FASTA; noisy, single outlier can set it)
     if n_contigs > 1:
         if gc_delta > 0.10:
-            score += 1.0
+            score += 0.5
             reasons.append(f"High inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
                            + _gc_outlier_note(gc_outlier))
         elif gc_delta > 0.05:
-            score += 0.5
+            score += 0.25
             reasons.append(f"Moderate inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
                            + _gc_outlier_note(gc_outlier))
 
     # Windowed GC (ours; weakest - prophage/island/GC-skew look the same)
     if windowed_gc_delta is not None and windowed_gc_delta > 0.15:
-        score += 0.5
+        score += 0.25
         reasons.append(
             f"Windowed GC variation along circular contig "
             f"(delta={windowed_gc_delta * 100:.1f}%); weak alone"
@@ -387,9 +390,9 @@ def assess_chimera_risk(
         score += 1.0
         reasons.append(f"High CheckM2 contamination ({contamination:.1f}%)")
 
-    # GTDB-Tk placement warning
+    # GTDB-Tk placement warning ("taxonomy")
     if taxonomy_warning:
-        score += 0.5
+        score += 1.0
         reasons.append("GTDB-Tk placement warning (low confidence or poor MSA)")
 
     # GUNC gene-level (authoritative; pass.GUNC is already proportion-aware)

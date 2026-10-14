@@ -93,9 +93,13 @@ Scoring (points may be fractional; High >=3, Medium >=2, Low >=0.5, Clean 0):
 | GUNC `pass.GUNC` = True & CSS > 0.45 | +1 |
 | Per-contig foreign length fraction >=10% / >=5% / >0% | +3 / +2 / +0.5 |
 | CheckM2 contamination > 10% | +1 (<=10% tolerated: HQ) |
-| Inter-contig GC delta > 10% / > 5% | +1 / +0.5 |
-| Windowed GC delta > 15% (circular contigs) | +0.5 |
-| GTDB-Tk placement warning | +0.5 |
+| GTDB-Tk placement warning ("taxonomy") | +1 |
+| Inter-contig GC delta > 10% / > 5% | +0.5 / +0.25 |
+| Windowed GC delta > 15% (circular contigs) | +0.25 |
+
+So: contamination alone = Low; contamination + GTDB warning = Medium;
+GC + minor foreign + GTDB warning = Medium; the same with foreign >= 5% = High;
+GUNC fail or foreign >= 10% = High; GC alone = Low.
 
 Pre-dRep filter: exclude `gunc_pass == False` or `chimera_risk == High`; send
 Medium to manual review (read the `reasons` column).

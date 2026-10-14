@@ -3,7 +3,7 @@ Echidna - metagenomic assembly, MAG integrity and chimera screening
 A toolkit for metagenomic assembly quality control and filtering
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __author__ = "Luigi Gallucci"
 __license__ = "MIT"
 

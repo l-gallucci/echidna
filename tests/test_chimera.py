@@ -159,21 +159,46 @@ def test_contamination_only_over_10_and_hq_tolerated():
     assert _risk(contamination=7.0)[0] == "Clean"    # <=10% tolerated -> 0
 
 
-def test_gtdbtk_warning_half_point():
-    risk, _ = _risk(taxonomy_warning=True)            # +0.5 -> Low
+def test_gtdbtk_warning_alone_is_low():
+    risk, _ = _risk(taxonomy_warning=True)            # +1 -> Low (alone)
     assert risk == "Low"
 
 
+def test_contam_plus_taxonomy_is_medium():
+    # contamination (+1) + GTDB-Tk warning (+1) = 2 -> Medium
+    risk, _ = _risk(contamination=12.0, taxonomy_warning=True)
+    assert risk == "Medium"
+
+
+def test_gc_plus_minor_foreign_plus_taxonomy_is_medium():
+    # GC>10 (+0.5) + minor foreign (+0.5) + warning (+1) = 2 -> Medium
+    risk, _ = _risk(gc_delta=0.15, n_contigs=50,
+                    contig_foreign_frac=0.003, taxonomy_warning=True)
+    assert risk == "Medium"
+
+
+def test_gc_plus_high_foreign_plus_taxonomy_is_high():
+    # same but foreign >= 5% (+2): 0.5 + 2 + 1 = 3.5 -> High
+    risk, _ = _risk(gc_delta=0.15, n_contigs=50,
+                    contig_foreign_frac=0.08, taxonomy_warning=True)
+    assert risk == "High"
+
+
 def test_assess_chimera_risk_high_combo():
-    # GC (+1) + GUNC fail (+3) -> High
+    # GC (+0.5) + GUNC fail (+3) -> High
     risk, _ = _risk(gc_delta=0.2, n_contigs=2, gunc_fail=True, gunc_css=0.9)
     assert risk == "High"
 
 
-def test_windowed_gc_alone_is_low_not_medium():
-    # a circular contig with only high windowed GC (+0.5) stays Low
+def test_gc_alone_stays_low():
+    # inter-contig GC >10% alone is +0.5 -> Low, never Medium
+    assert _risk(gc_delta=0.15, n_contigs=50)[0] == "Low"
+
+
+def test_windowed_gc_alone_is_not_flagged():
+    # windowed GC is the weakest (+0.25) -> below Low alone (Clean), but noted
     risk, reasons = _risk(windowed_gc_delta=0.169, n_contigs=1)
-    assert risk == "Low"
+    assert risk == "Clean"
     assert any("Windowed GC" in r for r in reasons)
 
 

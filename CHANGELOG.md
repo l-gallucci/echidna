@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-10-14
+
+### Changed
+- `check-chimeras` scoring retuned so Medium means a real taxonomic/contamination
+  concern, not accumulated weak signals. GTDB-Tk warning is now +1 (was +0.5),
+  GC inter-contig +0.5/+0.25 (was +1/+0.5) and windowed GC +0.25 (was +0.5).
+  Resulting tiers: contamination alone = Low; contamination + GTDB warning =
+  Medium; GC + minor foreign + GTDB warning = Medium; the same with foreign
+  >= 5% = High; GUNC fail or foreign >= 10% = High; GC alone = Low. A minor
+  foreign contig still scores (+0.5 -> at least Low) so it is never hidden, and
+  is always named in `foreign_contigs` regardless of tier.
+
 ## [0.0.2] - 2026-10-14
 
 ### Changed
