@@ -77,15 +77,16 @@ def parse_mmseqs_taxonomy(tsv_file: Path) -> Dict[str, int]:
 def parse_mmseqs_lineage(tsv_file: Path) -> Dict[str, str]:
     """
     Parse the lineage column of an MMseqs2 taxonomy TSV produced with
-    ``mmseqs taxonomy --tax-lineage 1``. Columns are then:
+    ``mmseqs taxonomy --tax-lineage 1``. The leading columns are
+    ``query_id  taxid  rank  name`` and the ';'-separated lineage
+    (``d_Bacteria;p_...;c_...``) is appended LAST - but MMseqs puts a varying
+    number of count/support columns between ``name`` and it, so the lineage is
+    located by content (the last field containing ';'), not a fixed index.
 
-        query_id    taxid    rank    name    lineage
-
-    where lineage is a semicolon string like ``d_Bacteria;p_...;c_...``. Using
-    the lineage (instead of a taxid + nodes.dmp walk) is what lets this work with
-    a GTDB MMseqs database, which carries no NCBI nodes.dmp, and keeps the ranks
-    in GTDB's own system. Returns {contig: lineage_string}; contigs without a
-    lineage column are omitted.
+    Using the lineage (instead of a taxid + nodes.dmp walk) is what lets this
+    work with a GTDB MMseqs database, which carries no NCBI nodes.dmp, and keeps
+    the ranks in GTDB's own system. Returns {contig: lineage_string}; contigs
+    without a lineage are omitted.
     """
     contig_lineage: Dict[str, str] = {}
     with open(tsv_file) as f:
@@ -93,10 +94,15 @@ def parse_mmseqs_lineage(tsv_file: Path) -> Dict[str, str]:
             if not line.strip():
                 continue
             fields = line.rstrip('\n').split('\t')
-            if len(fields) < 5:
+            if len(fields) < 2:
                 continue
             contig = fields[0].strip()
-            lineage = fields[4].strip()
+            # lineage = last field that looks like a ';'-separated path
+            lineage = ''
+            for fld in reversed(fields[1:]):
+                if ';' in fld:
+                    lineage = fld.strip()
+                    break
             if contig and lineage:
                 contig_lineage[contig] = lineage
     if contig_lineage:

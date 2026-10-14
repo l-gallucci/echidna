@@ -212,6 +212,21 @@ def test_parse_mmseqs_lineage(tmp_path):
     assert out['c1'].endswith('c_Gammaproteobacteria')
 
 
+def test_parse_mmseqs_lineage_real_format_lineage_is_last_column(tmp_path):
+    # Real MMseqs --tax-lineage output: count/support columns sit between the
+    # name and the lineage, which is the LAST field. The name may hold a space;
+    # only the lineage carries ';', so it is located by content not index.
+    f = tmp_path / "tax.tsv"
+    f.write_text(
+        "MGS_0001\t128280\tspecies\tJAPUGB01 sp036164895\t8\t8\t3\t0.580\t"
+        "d_Bacteria;p_Pseudomonadota;c_Gammaproteobacteria;o_Steroidobacterales;"
+        "f_GCA-2729495;g_JAPUGB01;s_JAPUGB01 sp036164895\n")
+    out = parse_mmseqs_lineage(f)
+    assert 'MGS_0001' in out
+    assert extract_rank_from_lineage(out['MGS_0001'], 'order') == 'Steroidobacterales'
+    assert extract_rank_from_lineage(out['MGS_0001'], 'class') == 'Gammaproteobacteria'
+
+
 def test_summarize_bin_lineage_flags_foreign_class():
     bin_contigs = {'bin1': ['c1', 'c2', 'c3']}
     lineage = {

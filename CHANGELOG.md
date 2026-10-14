@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-14
+
+### Fixed
+- `classify-contigs` (MMseqs2 lineage mode): the lineage is the LAST column of
+  `mmseqs createtsv --tax-lineage` output, with a varying number of
+  count/support columns between `name` and it. It was read from a fixed index
+  (a count column), so every contig came out `unresolved` and the per-bin
+  `.bins.tsv` showed all zeros despite real taxonomy. It is now located by
+  content (the last ';'-separated field).
+
 ## [2.0.0] - 2026-10-12
 
 ### Changed (BREAKING)
