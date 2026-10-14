@@ -47,14 +47,26 @@ Optional:
 
 ## check-chimeras
 
-Combines GUNC gene-level pass/fail, CheckM2 contamination, GTDB-Tk warnings, GC
-heterogeneity and the per-contig taxonomy foreign fraction (from
-classify-contigs/MMseqs) into a per-bin High/Medium/Low/Clean risk. The score is
-abundance-aware: GUNC's own `pass.GUNC` is trusted (it is already proportion
-based), and the per-contig signal is weighted by the foreign LENGTH fraction, so
-a few stray genes / one short contig (likely HGT) stay low while a substantial
-foreign fraction drives High. GC never reaches Medium on its own. The `reasons`
-column names the contigs that set each GC delta, with their lengths.
+Emits a per-bin 3-state **verdict** from TWO signals only:
+
+- **GUNC** gene-level: `pass.GUNC == False` means chimeric.
+- **Per-contig taxonomy** (MMseqs via classify-contigs, `--contig-taxonomy`): the
+  foreign LENGTH fraction >= `--min-foreign-frac` (default 0.05) means chimeric.
+
+| GUNC | Per-contig taxonomy | Verdict |
+|---|---|---|
+| chimeric | chimeric | `Chimeric` |
+| one of them chimeric | | `Check` (review) |
+| neither | | `Clean` |
+
+With a signal missing the verdict uses the one available (a single firing ->
+`Check`); with neither available -> `Unknown`.
+
+CheckM2 contamination, GTDB-Tk taxonomy/warning and GC are **reported as columns
+only** and do NOT change the verdict. The GC column (`gc_strong_outlier`) names a
+long contig whose GC deviates from the bin's length-weighted mean by more than
+`--gc-max-dev`, ignoring contigs shorter than `--gc-min-length` (so a short
+high-GC contig flags nothing).
 
 All sources are joined by a canonical genome name (FASTA extension plus any
 `--name-strip` suffix removed); bins with no match in a source are WARNED about
@@ -64,45 +76,30 @@ All sources are joined by a canonical genome name (FASTA extension plus any
 Required:
   --bins-dir PATH             Directory containing bin FASTA files
 
-Optional:
-  -o, --output PATH           Output TSV (default: chimera_report.tsv)
-  --gtdbtk-dir PATH           GTDB-Tk output directory (adds taxonomy signals)
-  --checkm2-report PATH       CheckM2 report (adds contamination signal)
-  --gunc-dir PATH             GUNC output directory (adds pass/fail + CSS signal)
-  --contig-taxonomy PATH      classify-contigs <output>.bins.tsv (adds the per-contig
-                              taxonomy foreign-fraction signal, from MMseqs/Kraken2/Kaiju)
+Verdict signals:
+  --gunc-dir PATH             GUNC output directory (pass.GUNC drives the verdict)
+  --contig-taxonomy PATH      classify-contigs <output>.bins.tsv (per-contig taxonomy)
+  --min-foreign-frac FLOAT    Foreign LENGTH fraction at/above which the per-contig
+                              signal counts as chimeric (default: 0.05)
+
+Informational only (reported columns, not in the verdict):
+  --gtdbtk-dir PATH           GTDB-Tk output directory
+  --checkm2-report PATH       CheckM2 quality_report.tsv
+  --gc-min-length INT         Ignore contigs shorter than this for the GC column (5000)
+  --gc-max-dev FLOAT          Report a GC outlier past this deviation from bin mean (0.10)
   --name-strip LIST           Suffixes to strip from genome names when joining sources
-                              (e.g. ".contigs,_genomic"); FASTA extensions always stripped
-  --gc-window INT             GC window size in bp (default: 5000)
-  --gc-step INT               GC step in bp (default: 2500)
-  --taxonomy-level STR        Taxonomy level for comparison (default: phylum)
+  --taxonomy-level STR        GTDB rank shown in gtdbtk_taxonomy (default: phylum)
   --extensions LIST           Genome extensions (default: fa,fasta,fna)
-  --dry-run
+  -o, --output PATH / --dry-run
 ```
 
-Output columns: `bin`, `n_contigs`, `is_circular_candidate`, `gc_mean_pct`,
-`gc_delta_pct`, `gc_cv_pct`, `windowed_gc_delta_pct`, `checkm2_contamination`,
-`gtdbtk_taxonomy`, `gtdbtk_warning`, `gunc_pass`, `gunc_css`,
-`contig_foreign_frac`, `chimera_risk`, `reasons`.
+Output columns: `bin`, `n_contigs`, `gc_mean_pct`, `gc_strong_outlier`,
+`checkm2_contamination`, `gtdbtk_taxonomy`, `gtdbtk_warning`, `gunc_pass`,
+`gunc_css`, `contig_foreign_frac`, `chimera_verdict`, `reasons`.
 
-Scoring (points may be fractional; High >=3, Medium >=2, Low >=0.5, Clean 0):
-
-| Signal | Score |
-|---|---|
-| GUNC `pass.GUNC` = False | +3 (nothing else from GUNC) |
-| GUNC `pass.GUNC` = True & CSS > 0.45 | +1 |
-| Per-contig foreign length fraction >=10% / >=5% / >0% | +3 / +2 / +0.5 |
-| CheckM2 contamination > 10% | +1 (<=10% tolerated: HQ) |
-| GTDB-Tk placement warning ("taxonomy") | +1 |
-| Inter-contig GC delta > 10% / > 5% | +0.5 / +0.25 |
-| Windowed GC delta > 15% (circular contigs) | +0.25 |
-
-So: contamination alone = Low; contamination + GTDB warning = Medium;
-GC + minor foreign + GTDB warning = Medium; the same with foreign >= 5% = High;
-GUNC fail or foreign >= 10% = High; GC alone = Low.
-
-Pre-dRep filter: exclude `gunc_pass == False` or `chimera_risk == High`; send
-Medium to manual review (read the `reasons` column).
+The verdict needs at least one of `--gunc-dir` / `--contig-taxonomy`. Pre-dRep
+filter: exclude `chimera_verdict == Chimeric`; send `Check` to manual review (the
+informational columns say why).
 
 ## classify-contigs
 
@@ -631,7 +628,7 @@ Optional (pass whatever you have):
 
 Columns: `genome`, `completeness`, `contamination`, `tier` (CheckM2), `taxonomy`,
 `rank_taxon` (GTDB-Tk), `n_16S`, `rrna_complete`, `trna_complete`, `mimag_rna_ok`
-(MIMAG), `chimera_risk` (check-chimeras), `contig_chimera`, `n_foreign_contigs`
+(MIMAG), `chimera_verdict` (check-chimeras), `contig_chimera`, `n_foreign_contigs`
 (classify-contigs), `ssu_agree`, `ssu_taxon` (check-ssu-taxonomy),
 `gunc_mmseqs_concordance` (True/False/NA: do GUNC pass.GUNC and MMseqs
 classify-contigs agree on chimeric-or-not), `concerns`.

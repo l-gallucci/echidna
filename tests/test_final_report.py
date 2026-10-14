@@ -67,7 +67,7 @@ def test_build_report_join_and_concerns():
                          'rank_taxon': 'Pseudomonadota'}}
     mimag = {'binB': {'n_16S': 1, 'rrna_complete': True, 'trna_complete': True,
                       'mimag_rna_ok': True}}
-    chimera = {'binA': 'High', 'binB': 'Clean'}
+    chimera = {'binA': 'Chimeric', 'binB': 'Clean'}
     contig = {'binA': {'contig_chimera': True, 'n_foreign': '1'}}
     ssu = {'binB': {'agree': 'False', 'ssu_taxon': 'X'}}
 
@@ -77,9 +77,9 @@ def test_build_report_join_and_concerns():
 
     a = by['binA']
     # contamination 12% -> Fail tier (and a concern)
-    assert a['tier'] == 'Fail' and a['chimera_risk'] == 'High'
+    assert a['tier'] == 'Fail' and a['chimera_verdict'] == 'Chimeric'
     # concerns gather the red flags for binA
-    assert 'contam>10' in a['concerns'] and 'chimera_High' in a['concerns']
+    assert 'contam>10' in a['concerns'] and 'chimeric' in a['concerns']
     assert 'contig_chimera' in a['concerns']
 
     b = by['binB']
@@ -92,7 +92,7 @@ def test_build_report_missing_sources_are_na():
     rows = build_report({'binX'}, checkm2={'binX': {'completeness': 91.0,
                                                     'contamination': 1.0}})
     r = rows[0]
-    assert r['taxonomy'] == 'NA' and r['chimera_risk'] == 'NA'
+    assert r['taxonomy'] == 'NA' and r['chimera_verdict'] == 'NA'
     assert r['ssu_agree'] == 'NA' and r['concerns'] == ''   # no red flags
 
 

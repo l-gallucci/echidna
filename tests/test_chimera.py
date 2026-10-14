@@ -12,8 +12,9 @@ from echidna.utils.chimera import (
     parse_gunc_output,
     parse_gunc_contig_assignments,
     gc_outlier_contigs,
+    strong_gc_outlier,
     has_taxonomy_warning,
-    assess_chimera_risk,
+    assess_chimera_verdict,
 )
 
 
@@ -122,105 +123,61 @@ def test_has_taxonomy_warning():
     assert has_taxonomy_warning({"msa_percent": 95.0, "warnings": ""}) is False
 
 
-def _risk(**kw):
-    base = dict(gc_delta=0.0, gc_cv=0.0, n_contigs=1,
-                contamination=None, windowed_gc_delta=None)
-    base.update(kw)
-    return assess_chimera_risk(**base)
+# ---- verdict from two signals: GUNC + per-contig taxonomy (MMseqs) ----------
 
-
-def test_assess_chimera_risk_clean():
-    risk, reasons = _risk()
-    assert risk == "Clean" and reasons == []
-
-
-def test_assess_chimera_risk_gc_high():
-    # inter-contig GC >10% is now +1 -> Low on its own (never Medium)
-    risk, reasons = _risk(gc_delta=0.12, n_contigs=3)
-    assert risk == "Low"
-    assert any("GC heterogeneity" in r for r in reasons)
-
-
-def test_assess_chimera_risk_gunc_fail_is_high():
-    # GUNC fail is +3 -> High on its own (authoritative gene-level signal)
-    risk, reasons = _risk(gunc_fail=True, gunc_css=0.82)
-    assert risk == "High"
+def test_verdict_both_signals_chimeric():
+    # GUNC fail AND taxonomy chimeric -> Chimeric
+    v, reasons = assess_chimera_verdict(gunc_fail=True, tax_chimeric=True,
+                                        gunc_css=0.82, contig_foreign_frac=0.2)
+    assert v == "Chimeric"
     assert any("GUNC fail" in r for r in reasons)
+    assert any("Per-contig taxonomy" in r for r in reasons)
 
 
-def test_assess_chimera_risk_gunc_css_elevated_is_low():
-    risk, reasons = _risk(gunc_fail=False, gunc_css=0.5)   # +1
-    assert risk == "Low"
-    assert any("clade separation" in r.lower() for r in reasons)
+def test_verdict_one_signal_is_check():
+    assert assess_chimera_verdict(gunc_fail=True, tax_chimeric=False)[0] == "Check"
+    assert assess_chimera_verdict(gunc_fail=False, tax_chimeric=True)[0] == "Check"
 
 
-def test_contamination_only_over_10_and_hq_tolerated():
-    assert _risk(contamination=12.0)[0] == "Low"     # +1 -> Low
-    assert _risk(contamination=7.0)[0] == "Clean"    # <=10% tolerated -> 0
+def test_verdict_neither_is_clean():
+    assert assess_chimera_verdict(gunc_fail=False, tax_chimeric=False)[0] == "Clean"
 
 
-def test_gtdbtk_warning_alone_is_low():
-    risk, _ = _risk(taxonomy_warning=True)            # +1 -> Low (alone)
-    assert risk == "Low"
+def test_verdict_missing_signal_uses_the_available_one():
+    # only one signal present and firing -> Check (cannot confirm both)
+    assert assess_chimera_verdict(gunc_fail=True, tax_chimeric=None)[0] == "Check"
+    assert assess_chimera_verdict(gunc_fail=None, tax_chimeric=True)[0] == "Check"
+    # only one present and clean -> Clean
+    assert assess_chimera_verdict(gunc_fail=False, tax_chimeric=None)[0] == "Clean"
+    # neither available -> Unknown
+    assert assess_chimera_verdict(gunc_fail=None, tax_chimeric=None)[0] == "Unknown"
 
 
-def test_contam_plus_taxonomy_is_medium():
-    # contamination (+1) + GTDB-Tk warning (+1) = 2 -> Medium
-    risk, _ = _risk(contamination=12.0, taxonomy_warning=True)
-    assert risk == "Medium"
+def test_gc_not_in_verdict():
+    # GC / contamination / GTDB do not even enter assess_chimera_verdict
+    import inspect
+    params = set(inspect.signature(assess_chimera_verdict).parameters)
+    assert params == {'gunc_fail', 'tax_chimeric', 'gunc_css', 'contig_foreign_frac'}
 
 
-def test_gc_plus_minor_foreign_plus_taxonomy_is_medium():
-    # GC>10 (+0.5) + minor foreign (+0.5) + warning (+1) = 2 -> Medium
-    risk, _ = _risk(gc_delta=0.15, n_contigs=50,
-                    contig_foreign_frac=0.003, taxonomy_warning=True)
-    assert risk == "Medium"
+# ---- strong GC outlier (reported column only, length-filtered) --------------
+
+def test_strong_gc_outlier_ignores_short_contigs():
+    gc = {'long_norm': 0.50, 'long_dev': 0.68, 'tiny': 0.95}
+    length = {'long_norm': 100_000, 'long_dev': 80_000, 'tiny': 200}
+    out = strong_gc_outlier(gc, length, min_len=5000, max_dev=0.10)
+    assert out is not None
+    assert out['contig'] == 'long_dev'          # tiny 200bp ignored despite 95% GC
+    assert out['gc'] == 0.68
 
 
-def test_gc_plus_high_foreign_plus_taxonomy_is_high():
-    # same but foreign >= 5% (+2): 0.5 + 2 + 1 = 3.5 -> High
-    risk, _ = _risk(gc_delta=0.15, n_contigs=50,
-                    contig_foreign_frac=0.08, taxonomy_warning=True)
-    assert risk == "High"
+def test_strong_gc_outlier_none_when_within_mean():
+    gc = {'a': 0.50, 'b': 0.52, 'c': 0.49}
+    length = {'a': 100_000, 'b': 90_000, 'c': 80_000}
+    assert strong_gc_outlier(gc, length, min_len=5000, max_dev=0.10) is None
 
 
-def test_assess_chimera_risk_high_combo():
-    # GC (+0.5) + GUNC fail (+3) -> High
-    risk, _ = _risk(gc_delta=0.2, n_contigs=2, gunc_fail=True, gunc_css=0.9)
-    assert risk == "High"
-
-
-def test_gc_alone_stays_low():
-    # inter-contig GC >10% alone is +0.5 -> Low, never Medium
-    assert _risk(gc_delta=0.15, n_contigs=50)[0] == "Low"
-
-
-def test_windowed_gc_alone_is_not_flagged():
-    # windowed GC is the weakest (+0.25) -> below Low alone (Clean), but noted
-    risk, reasons = _risk(windowed_gc_delta=0.169, n_contigs=1)
-    assert risk == "Clean"
-    assert any("Windowed GC" in r for r in reasons)
-
-
-def test_contig_foreign_frac_tiers():
-    # length-weighted per-contig foreign fraction (MMseqs via classify-contigs)
-    assert _risk(contig_foreign_frac=0.12)[0] == "High"    # >=10% +3
-    assert _risk(contig_foreign_frac=0.07)[0] == "Medium"  # >=5%  +2
-    assert _risk(contig_foreign_frac=0.02)[0] == "Low"     # >0%   +0.5
-    risk, reasons = _risk(contig_foreign_frac=0.0)
-    assert risk == "Clean" and not any("foreign" in r for r in reasons)
-
-
-def test_gc_outlier_note_in_reason():
-    outlier = {"high": ("contigA", 0.65, 500_000),
-               "low": ("contigB", 0.35, 1_200)}
-    risk, reasons = _risk(gc_delta=0.12, n_contigs=2, gc_outlier=outlier)
-    joined = " ".join(reasons)
-    assert "contigA" in joined and "contigB" in joined
-    assert "1,200bp" in joined          # short outlier length shown for review
-
-
-def test_check_chimeras_loads_contig_foreign_frac(tmp_path):
+def test_check_chimeras_verdict_wiring(tmp_path):
     import argparse
     from echidna.commands import check_chimeras
     f = tmp_path / "ct.bins.tsv"
@@ -229,14 +186,14 @@ def test_check_chimeras_loads_contig_foreign_frac(tmp_path):
     out = check_chimeras._load_contig_foreign_frac(f)
     assert out['binA'] == pytest.approx(0.12) and out['binB'] == 0.0
 
-    # parser gained --contig-taxonomy / --name-strip and dropped the GUNC per-contig flags
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers()
     check_chimeras.register_parser(sub)
     args = parser.parse_args(['check-chimeras', '--bins-dir', 'bins',
-                              '--contig-taxonomy', 'ct.bins.tsv',
-                              '--name-strip', '.contigs,_genomic'])
+                              '--gunc-dir', 'gunc', '--contig-taxonomy', 'ct.bins.tsv',
+                              '--name-strip', '.contigs'])
     assert str(args.contig_taxonomy) == 'ct.bins.tsv'
-    assert args.name_strip == '.contigs,_genomic'
+    assert args.min_foreign_frac == 0.05 and args.name_strip == '.contigs'
+    # the removed GUNC per-contig flag no longer parses
     with pytest.raises(SystemExit):
         parser.parse_args(['check-chimeras', '--bins-dir', 'b', '--gunc-tax-rank', 'order'])

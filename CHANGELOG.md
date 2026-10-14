@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-10-14
+
+### Changed (BREAKING output)
+- `check-chimeras` no longer scores points; it now emits a 3-state VERDICT from
+  TWO signals only: GUNC (`pass.GUNC=False`) and per-contig taxonomy (MMseqs via
+  `--contig-taxonomy`, foreign LENGTH fraction >= `--min-foreign-frac`, default
+  0.05). both chimeric -> `Chimeric`; one -> `Check`; neither -> `Clean`; with a
+  signal missing the available one is used (a single firing -> `Check`), else
+  `Unknown`. Output column `chimera_risk` is replaced by `chimera_verdict`.
+- CheckM2 contamination, GTDB-Tk taxonomy/warning and GC are REPORTED as columns
+  only and no longer affect the verdict. GC is now a `gc_strong_outlier` column:
+  a long contig whose GC deviates from the bin's length-weighted mean by more
+  than `--gc-max-dev` (default 0.10), ignoring contigs shorter than
+  `--gc-min-length` (default 5000 bp) - so a short high-GC contig no longer
+  flags anything. `--gc-window`/`--gc-step` removed.
+- `final-report`: the chimera column is now `chimera_verdict`; concerns use
+  `chimeric` / `chimera_check`.
+
+### Added
+- `utils/chimera.strong_gc_outlier` and `assess_chimera_verdict`.
+
 ## [0.0.3] - 2026-10-14
 
 ### Changed

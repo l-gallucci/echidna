@@ -128,6 +128,37 @@ def gc_outlier_contigs(per_contig_gc: Dict[str, float],
     }
 
 
+def strong_gc_outlier(per_contig_gc: Dict[str, float],
+                      per_contig_len: Dict[str, int],
+                      min_len: int = 5000,
+                      max_dev: float = 0.10) -> Optional[Dict]:
+    """
+    Find a LONG contig whose GC deviates strongly from the bin's own mean.
+
+    Short contigs are ignored (a 200 bp contig has an extreme GC that means
+    nothing); only contigs >= ``min_len`` count, and the bin mean is
+    length-weighted over them. Returns the single most-deviant contig when its
+    |GC - mean| exceeds ``max_dev`` (e.g. 0.10 = 10 GC points), else None. This
+    is REPORTED (a column), it does not drive the chimera verdict.
+
+    Returns {contig, gc, length, bin_mean, dev} or None.
+    """
+    qual = {n: g for n, g in per_contig_gc.items()
+            if not math.isnan(g) and per_contig_len.get(n, 0) >= min_len}
+    if len(qual) < 2:
+        return None
+    total_len = sum(per_contig_len[n] for n in qual)
+    if total_len <= 0:
+        return None
+    mean = sum(g * per_contig_len[n] for n, g in qual.items()) / total_len
+    worst = max(qual, key=lambda n: abs(qual[n] - mean))
+    dev = abs(qual[worst] - mean)
+    if dev <= max_dev:
+        return None
+    return {'contig': worst, 'gc': qual[worst], 'length': per_contig_len[worst],
+            'bin_mean': mean, 'dev': dev}
+
+
 # ---------------------------------------------------------------------------
 # GTDB-Tk taxonomy parsing
 # ---------------------------------------------------------------------------
@@ -312,124 +343,49 @@ def has_taxonomy_warning(tax_record: Dict) -> bool:
 # Risk assessment
 # ---------------------------------------------------------------------------
 
-def assess_chimera_risk(
-    gc_delta: float,
-    gc_cv: float,
-    n_contigs: int,
-    contamination: Optional[float],
-    windowed_gc_delta: Optional[float],
-    taxonomy_warning: bool = False,
+def assess_chimera_verdict(
     gunc_fail: Optional[bool] = None,
+    tax_chimeric: Optional[bool] = None,
     gunc_css: Optional[float] = None,
     contig_foreign_frac: Optional[float] = None,
-    gc_outlier: Optional[Dict] = None,
 ) -> Tuple[str, List[str]]:
     """
-    Assess chimera risk for a bin/MAG from multiple independent signals.
+    Decide a bin's chimera verdict from TWO orthogonal signals only:
 
-    Gene-level taxonomy (GUNC pass/fail) and per-contig taxonomy (MMseqs, via
-    classify-contigs) drive the score; GC heterogeneity is noisy (a single short
-    contig can set the max-min delta) so it only corroborates and never reaches
-    Medium on its own.
+      - GUNC gene-level: ``gunc_fail`` (pass.GUNC == False means chimeric).
+      - Per-contig taxonomy (MMseqs/classify-contigs): ``tax_chimeric`` (the bin
+        spans >= 2 taxa with a substantial foreign length fraction).
 
-    GUNC's own pass.GUNC is already proportion-aware (it fails only on
-    substantial, well-separated contamination), so we trust it and do not pile
-    extra points on top of a fail. The per-contig signal is weighted by the
-    LENGTH fraction of foreign contigs: a tiny fraction (a few genes / one short
-    contig) is likely HGT, not a chimera, so it scores low; a substantial
-    fraction scores high.
+    Both agree it is chimeric -> 'Chimeric'; only one fires -> 'Check' (review);
+    neither -> 'Clean'. When a signal is missing the verdict uses the signals
+    available (so one-signal firing is at most 'Check'); with neither available
+    -> 'Unknown'. Nothing else (GC, contamination, GTDB-Tk) enters the verdict -
+    those are reported as separate columns.
 
-    Scoring (points, may be fractional):
-      GUNC gene-level (authoritative)
-        pass.GUNC = False                       → +3  (nothing else from GUNC)
-        pass.GUNC = True & CSS > 0.45            → +1
-      Per-contig taxonomy foreign LENGTH fraction (MMseqs / classify-contigs)
-        >= 10 %                                 → +3
-        >=  5 %                                 → +2
-        >   0 %                                 → +0.5 (minor; possible HGT)
-      CheckM2 contamination
-        > 10 %                                  → +1   (<=10 % tolerated: HQ)
-      GTDB-Tk placement warning ("taxonomy")
-        any                                     → +1
-      GC heterogeneity between contigs (ours, from FASTA; noisy)
-        delta > 10 %                            → +0.5    delta > 5 % → +0.25
-      Windowed GC along a circular contig (ours; weakest)
-        delta > 15 %                            → +0.25
-
-    Risk levels  →  score thresholds
-      High   ≥ 3      Medium ≥ 2      Low ≥ 0.5      Clean 0
-
-    So: contamination alone → Low; contamination + GTDB warning → Medium;
-    GC + minor foreign + GTDB warning → Medium; the same with foreign >= 5 %
-    (substantial) → High; GUNC fail or foreign >= 10 % → High; GC alone → Low.
+    Returns (verdict, reasons).
     """
     reasons: List[str] = []
-    score = 0.0
 
-    # GC inter-contig (ours, from FASTA; noisy, single outlier can set it)
-    if n_contigs > 1:
-        if gc_delta > 0.10:
-            score += 0.5
-            reasons.append(f"High inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
-                           + _gc_outlier_note(gc_outlier))
-        elif gc_delta > 0.05:
-            score += 0.25
-            reasons.append(f"Moderate inter-contig GC heterogeneity (delta={gc_delta * 100:.1f}%)"
-                           + _gc_outlier_note(gc_outlier))
-
-    # Windowed GC (ours; weakest - prophage/island/GC-skew look the same)
-    if windowed_gc_delta is not None and windowed_gc_delta > 0.15:
-        score += 0.25
-        reasons.append(
-            f"Windowed GC variation along circular contig "
-            f"(delta={windowed_gc_delta * 100:.1f}%); weak alone"
-        )
-
-    # CheckM2 contamination (only > 10 %; HQ MAGs tolerate a little)
-    if contamination is not None and contamination > 10.0:
-        score += 1.0
-        reasons.append(f"High CheckM2 contamination ({contamination:.1f}%)")
-
-    # GTDB-Tk placement warning ("taxonomy")
-    if taxonomy_warning:
-        score += 1.0
-        reasons.append("GTDB-Tk placement warning (low confidence or poor MSA)")
-
-    # GUNC gene-level (authoritative; pass.GUNC is already proportion-aware)
     if gunc_fail is True:
-        score += 3.0
-        if gunc_css is not None:
-            reasons.append(f"GUNC fail: genes span multiple clades (CSS={gunc_css:.2f})")
-        else:
-            reasons.append("GUNC fail: genes span multiple clades")
-    elif gunc_css is not None and gunc_css > 0.45:
-        score += 1.0
-        reasons.append(f"Elevated GUNC clade separation score (CSS={gunc_css:.2f})")
+        reasons.append(
+            "GUNC fail: genes span multiple clades"
+            + (f" (CSS={gunc_css:.2f})" if gunc_css is not None else ""))
+    if tax_chimeric is True:
+        frac = f" ({contig_foreign_frac * 100:.1f}% foreign length)" \
+            if contig_foreign_frac is not None else ""
+        reasons.append(f"Per-contig taxonomy: contigs span >=2 taxa{frac} (MMseqs)")
 
-    # Per-contig taxonomy, length-weighted (MMseqs via classify-contigs)
-    if contig_foreign_frac is not None and contig_foreign_frac > 0:
-        pct = contig_foreign_frac * 100
-        if contig_foreign_frac >= 0.10:
-            score += 3.0
-            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
-                           f"contigs (MMseqs) - substantial, likely chimeric")
-        elif contig_foreign_frac >= 0.05:
-            score += 2.0
-            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
-                           f"contigs (MMseqs) - elevated")
-        else:
-            score += 0.5
-            reasons.append(f"Per-contig taxonomy: {pct:.1f}% of length in foreign "
-                           f"contigs (MMseqs) - minor (possible HGT/single contig)")
-
-    if score >= 3:
-        return 'High', reasons
-    elif score >= 2:
-        return 'Medium', reasons
-    elif score >= 0.5:
-        return 'Low', reasons
-    else:
-        return 'Clean', reasons
+    available = [s for s in (gunc_fail, tax_chimeric) if s is not None]
+    if not available:
+        return 'Unknown', reasons
+    n_fire = sum(1 for s in available if s)
+    if len(available) == 2 and n_fire == 2:
+        return 'Chimeric', reasons
+    if n_fire >= 1:
+        if len(available) == 1:
+            reasons.append("only one of GUNC / per-contig taxonomy available")
+        return 'Check', reasons
+    return 'Clean', reasons
 
 
 def _gc_outlier_note(gc_outlier: Optional[Dict]) -> str:

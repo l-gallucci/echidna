@@ -194,9 +194,10 @@ echidna check-chimeras \
 The per-contig taxonomy signal comes from classify-contigs (MMseqs/Kraken2/Kaiju),
 weighted by the foreign LENGTH fraction, via `--contig-taxonomy`.
 
-Pre-dRep filter: exclude rows with `gunc_pass == False` or `chimera_risk == High`;
-send Medium to manual review (the `reasons` column names the contigs driving each
-GC delta and the foreign-fraction).
+Pre-dRep filter: exclude rows with `chimera_verdict == Chimeric` (GUNC and
+per-contig taxonomy both chimeric); send `Check` to manual review (the
+informational columns - gunc_pass, contig_foreign_frac, gc_strong_outlier - say
+why).
 
 ### Step 4 - Classify clipping positions
 

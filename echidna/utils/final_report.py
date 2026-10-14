@@ -40,12 +40,13 @@ def _read_tsv(path: Path) -> List[Dict]:
 
 
 def parse_chimera_report(path: Path) -> Dict[str, str]:
-    """check-chimeras chimera_report.tsv -> {genome: chimera_risk}."""
+    """check-chimeras chimera_report.tsv -> {genome: chimera_verdict}
+    (Chimeric/Check/Clean/Unknown; falls back to the old chimera_risk column)."""
     out: Dict[str, str] = {}
     for row in _read_tsv(path):
         g = norm_name(row.get('bin') or row.get('genome') or '')
         if g:
-            out[g] = (row.get('chimera_risk') or 'NA').strip()
+            out[g] = (row.get('chimera_verdict') or row.get('chimera_risk') or 'NA').strip()
     return out
 
 
@@ -120,10 +121,10 @@ def _concerns(row: Dict) -> str:
     contam = row.get('contamination')
     if isinstance(contam, float) and not math.isnan(contam) and contam > 10.0:
         c.append('contam>10')
-    if row.get('chimera_risk') == 'High':
-        c.append('chimera_High')
-    elif row.get('chimera_risk') == 'Medium':
-        c.append('chimera_Medium')
+    if row.get('chimera_verdict') == 'Chimeric':
+        c.append('chimeric')
+    elif row.get('chimera_verdict') == 'Check':
+        c.append('chimera_check')
     if row.get('contig_chimera') is True:
         c.append('contig_chimera')
     if row.get('ssu_agree') == 'False':
@@ -136,7 +137,7 @@ def _concerns(row: Dict) -> str:
 REPORT_FIELDS = [
     'genome', 'completeness', 'contamination', 'tier', 'taxonomy',
     'rank_taxon', 'n_16S', 'rrna_complete', 'trna_complete', 'mimag_rna_ok',
-    'chimera_risk', 'contig_chimera', 'n_foreign_contigs',
+    'chimera_verdict', 'contig_chimera', 'n_foreign_contigs',
     'ssu_agree', 'ssu_taxon', 'gunc_mmseqs_concordance', 'concerns',
 ]
 
@@ -194,7 +195,7 @@ def build_report(
             'rrna_complete': mi.get('rrna_complete') if mi else 'NA',
             'trna_complete': mi.get('trna_complete') if mi else 'NA',
             'mimag_rna_ok': mi.get('mimag_rna_ok') if mi else 'NA',
-            'chimera_risk': chimera.get(genome, 'NA'),
+            'chimera_verdict': chimera.get(genome, 'NA'),
             'contig_chimera': co.get('contig_chimera', 'NA') if co else 'NA',
             'n_foreign_contigs': co.get('n_foreign', 'NA') if co else 'NA',
             'ssu_agree': str(su.get('agree', 'NA')) if su else 'NA',

@@ -33,11 +33,11 @@ from typing import Dict, List, Optional
 
 from ..utils.chimera import (
     analyze_bin_gc,
-    gc_outlier_contigs,
+    strong_gc_outlier,
     parse_gtdbtk_summary,
     extract_taxonomy_level,
     has_taxonomy_warning,
-    assess_chimera_risk,
+    assess_chimera_verdict,
 )
 from ..utils.checkm2 import parse_quality_report
 from ..utils.names import canonical_name, match_report
@@ -117,19 +117,20 @@ def run_chimera_check(
     checkm2_file: Optional[Path],
     gunc_dir: Optional[Path],
     contig_taxonomy_file: Optional[Path],
-    gc_window: int,
-    gc_step: int,
+    min_foreign_frac: float,
+    gc_min_length: int,
+    gc_max_dev: float,
     taxonomy_level: str,
     name_strip: List[str],
     dry_run: bool,
 ) -> Dict[str, int]:
     """
-    Run chimera detection for all bins in bins_dir. Returns {risk_level: count}.
-
-    Signals (all optional): GC (from the FASTA), CheckM2 contamination, GTDB-Tk
-    placement warning, GUNC pass/fail + CSS, and per-contig taxonomy foreign
-    fraction from classify-contigs (MMseqs). Every source is joined by a
-    canonical genome name (see utils.names) and unmatched bins are warned about.
+    Decide a chimera verdict per bin from TWO signals: GUNC pass/fail and the
+    per-contig taxonomy (MMseqs) foreign fraction. Both chimeric -> Chimeric;
+    one -> Check; neither -> Clean. CheckM2 contamination, GTDB-Tk taxonomy and a
+    strong GC outlier are REPORTED as columns but do not drive the verdict.
+    Every source is joined by a canonical genome name (utils.names) and unmatched
+    bins are warned about.
     """
     print_section("Loading auxiliary data")
 
@@ -169,7 +170,7 @@ def run_chimera_check(
     bin_files = sorted(set(bin_files))
     if not bin_files:
         log_error(f"No bin files found in {bins_dir} with extensions: {extensions}")
-        return {'risk': {}, 'gunc': {'pass': 0, 'fail': 0, 'na': 0}, 'gunc_used': bool(gunc_dir)}
+        return {'verdict': {}, 'gunc': {'pass': 0, 'fail': 0, 'na': 0}, 'gunc_used': bool(gunc_dir)}
     log_info(f"Found {len(bin_files):,} bin file(s)")
 
     bin_names = [b.stem for b in bin_files]
@@ -182,9 +183,9 @@ def run_chimera_check(
     if contig_frac_map:
         _warn_unmatched(bin_names, contig_frac_map.keys(), "contig-taxonomy", name_strip)
 
-    print_section("Analysing chimera risk per bin")
+    print_section("Deciding chimera verdict per bin")
     rows: List[Dict] = []
-    risk_counts: Dict[str, int] = {'High': 0, 'Medium': 0, 'Low': 0, 'Clean': 0}
+    verdict_counts: Dict[str, int] = {'Chimeric': 0, 'Check': 0, 'Clean': 0, 'Unknown': 0}
     gunc_counts: Dict[str, int] = {'pass': 0, 'fail': 0, 'na': 0}
 
     for bin_file in bin_files:
@@ -193,18 +194,21 @@ def run_chimera_check(
         log_info(f"\n  [{bin_name}]")
 
         try:
-            gc_data = analyze_bin_gc(bin_file, gc_window, gc_step)
+            gc_data = analyze_bin_gc(bin_file)
         except Exception as e:
             log_warning(f"  Could not analyse {bin_file.name}: {e}")
             continue
 
         bin_stats = gc_data['bin_gc_stats']
-        windowed_stats = gc_data.get('windowed_gc_stats')
-        gc_delta = bin_stats.get('delta') or 0.0
-        gc_cv = bin_stats.get('cv') or 0.0
-        windowed_delta = windowed_stats.get('delta') if windowed_stats else None
-        gc_outlier = gc_outlier_contigs(
-            gc_data['per_contig_gc'], gc_data['per_contig_len'])
+        # GC: informational only - a long contig far from the bin mean (short
+        # contigs ignored). Does NOT affect the verdict.
+        gc_out = strong_gc_outlier(gc_data['per_contig_gc'],
+                                   gc_data['per_contig_len'],
+                                   min_len=gc_min_length, max_dev=gc_max_dev)
+        gc_out_str = 'N/A'
+        if gc_out:
+            gc_out_str = (f"{gc_out['contig']} {gc_out['gc'] * 100:.1f}% "
+                          f"{gc_out['length']:,}bp vs bin_mean {gc_out['bin_mean'] * 100:.1f}%")
 
         tax_record = tax_c.get(key, {})
         classification = tax_record.get('classification', '')
@@ -224,40 +228,32 @@ def run_chimera_check(
             else:
                 gunc_counts['fail'] += 1
 
+        # Per-contig taxonomy signal: substantial foreign fraction = chimeric.
         contig_foreign_frac = frac_c.get(key)
+        tax_chimeric = (None if contig_foreign_frac is None
+                        else contig_foreign_frac >= min_foreign_frac)
 
-        risk, reasons = assess_chimera_risk(
-            gc_delta=gc_delta,
-            gc_cv=gc_cv,
-            n_contigs=gc_data['n_contigs'],
-            contamination=contamination,
-            windowed_gc_delta=windowed_delta,
-            taxonomy_warning=tax_warn,
-            gunc_fail=gunc_fail,
-            gunc_css=gunc_css,
-            contig_foreign_frac=contig_foreign_frac,
-            gc_outlier=gc_outlier,
-        )
-        risk_counts[risk] = risk_counts.get(risk, 0) + 1
+        verdict, reasons = assess_chimera_verdict(
+            gunc_fail=gunc_fail, tax_chimeric=tax_chimeric,
+            gunc_css=gunc_css, contig_foreign_frac=contig_foreign_frac)
+        verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
 
         log_info(
-            f"  Contigs={gc_data['n_contigs']}  GC_delta={gc_delta * 100:.1f}%  "
-            f"Contamination={'N/A' if contamination is None else f'{contamination:.1f}%'}  "
-            f"Risk={risk}"
+            f"  Contigs={gc_data['n_contigs']}  "
+            f"GUNC={'N/A' if gunc_fail is None else ('FAIL' if gunc_fail else 'pass')}  "
+            f"foreign_frac={'N/A' if contig_foreign_frac is None else f'{contig_foreign_frac * 100:.1f}%'}  "
+            f"Verdict={verdict}"
         )
         for reason in reasons:
             log_info(f"  ⚠  {reason}")
+        if gc_out:
+            log_info(f"  (info) strong GC outlier: {gc_out_str}")
 
         rows.append({
             'bin': bin_name,
             'n_contigs': gc_data['n_contigs'],
-            'is_circular_candidate': gc_data['is_circular_candidate'],
             'gc_mean_pct': f"{(bin_stats.get('mean') or float('nan')) * 100:.2f}",
-            'gc_delta_pct': f"{gc_delta * 100:.2f}",
-            'gc_cv_pct': f"{gc_cv * 100:.4f}",
-            'windowed_gc_delta_pct': (
-                f"{windowed_delta * 100:.2f}" if windowed_delta is not None else 'N/A'
-            ),
+            'gc_strong_outlier': gc_out_str,
             'checkm2_contamination': (
                 f"{contamination:.2f}" if contamination is not None else 'N/A'
             ),
@@ -267,17 +263,16 @@ def run_chimera_check(
             'gunc_css': ('N/A' if gunc_css is None else f"{gunc_css:.3f}"),
             'contig_foreign_frac': ('N/A' if contig_foreign_frac is None
                                     else f"{contig_foreign_frac:.4f}"),
-            'chimera_risk': risk,
+            'chimera_verdict': verdict,
             'reasons': ' | '.join(reasons),
         })
 
     if not dry_run and rows:
         fieldnames = [
-            'bin', 'n_contigs', 'is_circular_candidate',
-            'gc_mean_pct', 'gc_delta_pct', 'gc_cv_pct', 'windowed_gc_delta_pct',
+            'bin', 'n_contigs', 'gc_mean_pct', 'gc_strong_outlier',
             'checkm2_contamination', 'gtdbtk_taxonomy', 'gtdbtk_warning',
             'gunc_pass', 'gunc_css', 'contig_foreign_frac',
-            'chimera_risk', 'reasons',
+            'chimera_verdict', 'reasons',
         ]
         with open(output_file, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
@@ -285,7 +280,7 @@ def run_chimera_check(
             writer.writerows(rows)
         log_info(f"\nChimera report written to: {output_file}")
 
-    return {'risk': risk_counts, 'gunc': gunc_counts, 'gunc_used': bool(gunc_dir)}
+    return {'verdict': verdict_counts, 'gunc': gunc_counts, 'gunc_used': bool(gunc_dir)}
 
 
 # ---------------------------------------------------------------------------
@@ -299,41 +294,36 @@ def register_parser(subparsers):
         help='Detect chimeric MAGs and circular contigs using GC and taxonomy signals',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Signal scoring (points may be fractional)
+Verdict from TWO signals only (nothing else enters it)
 ---------------------
-  GUNC gene-level (authoritative; pass.GUNC is already proportion-aware)
-    pass.GUNC = False                 +3   (nothing else from GUNC)
-    pass.GUNC = True & CSS > 0.45      +1
-  Per-contig taxonomy foreign LENGTH fraction (--contig-taxonomy, from MMseqs/
-  classify-contigs; a tiny tail = likely HGT, a big fraction = chimera)
-    >= 10 %  +3     >= 5 %  +2     > 0 %  +0.5
-  CheckM2 contamination
-    > 10 %  +1     (<= 10 % tolerated: HQ MAGs carry a little)
-  GTDB-Tk warning ("taxonomy"; any, or MSA < 10 %)   +1
-  GC delta between contigs (ours, from FASTA; noisy, one short outlier can set it)
-    > 10 %  +0.5     > 5 %  +0.25
-  Windowed GC delta (circular contigs; weakest - prophage/island/skew look same)
-    > 15 %  +0.25
+  GUNC gene-level     : pass.GUNC = False  -> GUNC says chimeric
+  Per-contig taxonomy : foreign LENGTH fraction >= --min-foreign-frac (MMseqs via
+                        --contig-taxonomy / classify-contigs) -> taxonomy chimeric
 
-  Risk = High (≥3) / Medium (≥2) / Low (≥0.5) / Clean (0). So: contam alone =Low;
-  contam+warning =Medium; GC+minor-foreign+warning =Medium; with foreign >=5%
-  =High; GUNC fail or foreign >=10% =High; GC alone =Low.
+  both chimeric       -> Chimeric
+  only one            -> Check   (review)
+  neither             -> Clean
+  (with a signal missing, the verdict uses the one available: one firing -> Check)
+
+Reported but NOT in the verdict: CheckM2 contamination, GTDB-Tk taxonomy and a
+strong GC outlier (a long contig far from the bin's mean GC; short contigs are
+ignored) - all go to their own columns for inspection.
 
 Examples
 --------
-  # GC-only check
-  echidna check-chimeras --bins-dir bins/ --output chimera_report.tsv
-
-  # Full check with all signals
+  # Verdict from GUNC + per-contig taxonomy (the two that matter)
   echidna check-chimeras \\
     --bins-dir bins/ --output chimera_report.tsv \\
-    --gtdbtk-dir gtdbtk_results/ --checkm2-report checkm2/quality_report.tsv \\
     --gunc-dir gunc_results/ \\
     --contig-taxonomy contig_taxonomy.tsv.bins.tsv
 
+  # Add CheckM2 / GTDB-Tk as informational columns
+  echidna check-chimeras --bins-dir bins/ --gunc-dir gunc_results/ \\
+    --contig-taxonomy contig_taxonomy.tsv.bins.tsv \\
+    --checkm2-report checkm2/quality_report.tsv --gtdbtk-dir gtdbtk_results/
+
   # Tolerate a naming suffix some tools add
-  echidna check-chimeras --bins-dir bins/ --checkm2-report q.tsv \\
-    --name-strip .contigs,_genomic
+  echidna check-chimeras --bins-dir bins/ --gunc-dir gunc/ --name-strip .contigs
         """
     )
 
@@ -342,26 +332,33 @@ Examples
     parser.add_argument('-o', '--output', type=Path, default=Path('chimera_report.tsv'),
                         help='Output TSV report (default: chimera_report.tsv)')
 
-    # Optional integration with other tools
-    parser.add_argument('--gtdbtk-dir', type=Path,
-                        help='GTDB-Tk output directory (adds taxonomy-based signals)')
-    parser.add_argument('--checkm2-report', type=Path,
-                        help='CheckM2 quality_report.tsv (adds contamination signal)')
+    # Verdict signals
     parser.add_argument('--gunc-dir', type=Path,
-                        help='GUNC output directory (adds gene-level pass/fail + CSS signal)')
+                        help='GUNC output directory (pass.GUNC drives the verdict)')
     parser.add_argument('--contig-taxonomy', type=Path,
-                        help='classify-contigs <output>.bins.tsv (adds the per-contig '
-                             'taxonomy foreign-fraction signal, from MMseqs/Kraken2/Kaiju)')
+                        help='classify-contigs <output>.bins.tsv (per-contig taxonomy; '
+                             'foreign-fraction drives the verdict)')
+    parser.add_argument('--min-foreign-frac', type=float, default=0.05,
+                        help='Foreign LENGTH fraction at/above which the per-contig '
+                             'taxonomy signal counts as chimeric (default: 0.05)')
+
+    # Informational-only sources (reported, not in the verdict)
+    parser.add_argument('--gtdbtk-dir', type=Path,
+                        help='GTDB-Tk output directory (reported column only)')
+    parser.add_argument('--checkm2-report', type=Path,
+                        help='CheckM2 quality_report.tsv (reported column only)')
     parser.add_argument('--name-strip', default='',
                         help='Comma-separated suffixes to strip from genome names when '
                              'joining sources (e.g. ".contigs,_genomic"); FASTA extensions '
                              'are always stripped')
 
-    # GC window parameters
-    parser.add_argument('--gc-window', type=int, default=5000,
-                        help='Window size for circular-contig GC analysis (default: 5000 bp)')
-    parser.add_argument('--gc-step', type=int, default=2500,
-                        help='Step size for GC sliding window (default: 2500 bp)')
+    # GC outlier (reported column only)
+    parser.add_argument('--gc-min-length', type=int, default=5000,
+                        help='Ignore contigs shorter than this for the GC-outlier column '
+                             '(default: 5000 bp)')
+    parser.add_argument('--gc-max-dev', type=float, default=0.10,
+                        help='Report a GC outlier when a long contig deviates from the '
+                             "bin's mean GC by more than this (default: 0.10 = 10 points)")
 
     parser.add_argument('--taxonomy-level', default='phylum',
                         choices=['domain', 'phylum', 'class', 'order', 'family',
@@ -394,11 +391,9 @@ def run(args):
         log_error(f"contig-taxonomy file not found: {args.contig_taxonomy}")
         sys.exit(1)
 
-    if args.gc_step >= args.gc_window:
-        log_warning(
-            f"--gc-step ({args.gc_step}) >= --gc-window ({args.gc_window}); "
-            "windows will not overlap, which may miss narrow GC shifts"
-        )
+    if not args.gunc_dir and not args.contig_taxonomy:
+        log_warning("Neither --gunc-dir nor --contig-taxonomy given; the verdict "
+                    "needs at least one of them (all bins will be 'Unknown').")
 
     extensions = [e.strip() for e in args.extensions.split(',')]
     name_strip = [s.strip() for s in args.name_strip.split(',') if s.strip()]
@@ -413,29 +408,30 @@ def run(args):
         checkm2_file=args.checkm2_report,
         gunc_dir=args.gunc_dir,
         contig_taxonomy_file=args.contig_taxonomy,
-        gc_window=args.gc_window,
-        gc_step=args.gc_step,
+        min_foreign_frac=args.min_foreign_frac,
+        gc_min_length=args.gc_min_length,
+        gc_max_dev=args.gc_max_dev,
         taxonomy_level=args.taxonomy_level,
         name_strip=name_strip,
         dry_run=args.dry_run,
     )
 
-    risk_counts = result['risk']
-    if not risk_counts:
+    verdict_counts = result['verdict']
+    if not verdict_counts:
         log_error("No bins were analysed — check --bins-dir and --extensions")
         sys.exit(1)
 
-    print_section("CHIMERA RISK SUMMARY")
-    total = sum(risk_counts.values())
-    for level in ('High', 'Medium', 'Low', 'Clean'):
-        count = risk_counts.get(level, 0)
-        marker = '⚠ ' if level in ('High', 'Medium') else '  '
-        print(f"  {marker}{level:7s}: {count:>6,}")
+    print_section("CHIMERA VERDICT SUMMARY")
+    total = sum(verdict_counts.values())
+    for level in ('Chimeric', 'Check', 'Clean', 'Unknown'):
+        count = verdict_counts.get(level, 0)
+        marker = '⚠ ' if level in ('Chimeric', 'Check') else '  '
+        print(f"  {marker}{level:8s}: {count:>6,}")
 
-    flagged = risk_counts.get('High', 0) + risk_counts.get('Medium', 0)
+    flagged = verdict_counts.get('Chimeric', 0) + verdict_counts.get('Check', 0)
     if total > 0:
         pct = 100 * flagged / total
-        print(f"\n  Flagged (High + Medium): {flagged:,} / {total:,} ({pct:.1f}%)")
+        print(f"\n  Flagged (Chimeric + Check): {flagged:,} / {total:,} ({pct:.1f}%)")
 
     # GUNC pass/fail tally (only when --gunc-dir was supplied)
     if result['gunc_used']:
