@@ -183,7 +183,8 @@ Examples:
     --selected-dir filtered/Selected/ --output gunc_out/ \\
     --file-suffix .fa --threads 20
 
-  # Also emit per-contig taxonomy (lets check-chimeras flag multi-clade bins)
+  # Also emit GUNC's per-contig gene taxonomy (for inspection; check-chimeras
+  # does NOT read it - its per-contig signal comes from classify-contigs)
   echidna run-gunc \\
     --selected-dir filtered/Selected/ --output gunc_out/ \\
     --file-suffix .fa --threads 20 --contig-taxonomy-output
@@ -207,11 +208,12 @@ Examples:
     parser.add_argument('--tiers', default='HQ,MQ,LQ',
                         help='Comma-separated tiers to process (default: HQ,MQ,LQ)')
     parser.add_argument('--contig-taxonomy-output', action='store_true',
-                        help='Write per-contig gene-taxonomy assignments '
-                             '(gunc --contig_taxonomy_output). Produces '
-                             '<genome>.contig_assignments.tsv, which '
-                             'check-chimeras consumes to flag bins whose contigs '
-                             'span multiple clades (strong chimera signal).')
+                        help="Write GUNC's per-contig gene-taxonomy assignments "
+                             '(gunc --contig_taxonomy_output), i.e. '
+                             '<genome>.contig_assignments.tsv, for inspection. '
+                             'NOTE: check-chimeras does NOT read this file; its '
+                             'per-contig taxonomy signal comes from classify-contigs '
+                             '(run-mmseqs-contigs -> classify-contigs).')
     parser.add_argument('--gunc-args', default='',
                         help='Additional arguments to pass to gunc run (quoted)')
 

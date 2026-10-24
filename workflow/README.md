@@ -56,7 +56,7 @@ genomes_dir ─┬─> run-checkm2 ───┐
              ├─> run-gtdbtk ────┤
              ├─> run-mimag-rna ─┼─> organize-mags (HQ/MQ/LQ + rename + MIMAG rRNA/tRNA gate)
              └─> run-gunc ──────┘
-                      └──────────> check-chimeras (GC + contamination + GUNC)
+                      └──────────> check-chimeras (GUNC + per-contig taxonomy)
 ```
 
 `run-mimag-rna` (barrnap + tRNAscan-SE) is optional: set `mimag_rna: false` in

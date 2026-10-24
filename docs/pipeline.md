@@ -7,6 +7,72 @@ For the two branches at a glance - which step needs which input file, and the
 data-flow diagrams - see [workflows.md](workflows.md). The misassembly branch is
 PacBio HiFi only.
 
+## Quick start - run everything yourself
+
+The fast path if you want full control and no Snakemake. Each heavy tool runs in
+its own conda env (`conda run -n <env> ...`); set the envs up once
+([installation.md](installation.md)) and point Echidna at databases you already
+have. Fill in the paths and paste.
+
+```bash
+# --- 0. one-time: databases you already downloaded (validated, written to config)
+echidna fetch-databases \
+    --gtdbtk-data /data/gtdbtk_r220 \                      # GTDB-Tk: a DIRECTORY
+    --gunc-db     /data/gunc/gunc_db_gtdb214.dmnd \        # GUNC: a .dmnd FILE
+    --checkm2-db  /data/checkm2/uniref100.KO.1.dmnd        # CheckM2: a .dmnd FILE
+# don't have them? add --download (see installation.md "Databases")
+
+ASM=assembly.fa          # your assembly
+BAM=mapping.bam          # reads mapped to $ASM (sorted + indexed); HiFi for branch A
+BINS=bins/               # your bins (after binning)
+GTDBTK_DB=/data/gtdbtk_r220
+GUNC_DB=/data/gunc/gunc_db_gtdb214.dmnd
+MMSEQS_DB=/data/mmseqs_gtdb/gtdb
+T=40
+
+# --- Branch A: misassembly cleaning (PacBio HiFi only; skip if not HiFi) ---
+conda run -n anvio-9 echidna run-anvi-misassemblies -b $BAM -o misasm/MisAsm -T $T
+echidna process-large-contigs -a $ASM -m misasm/ -o 01_large/ --threads $T
+# optional read-level chimera signal (needs Kraken2/Kaiju on the reads):
+echidna check-read-chimeras --bam $BAM --kraken2-output reads.kraken2 \
+    --kraken2-report report.txt -o 02_chimera/
+echidna classify-clipping --bam $BAM -m misasm/ \
+    --taxonomy-windows 02_chimera/chimera_read_windows.tsv -o 03_classified.tsv
+echidna filter-misassemblies -a 01_large/assembly_for_filtering.fa -m misasm/ \
+    -g 01_large/HQ_extracted/ -o 04_clean.fa --mode split --safe
+# -> now bin 04_clean.fa with MetaBAT2/MaxBin2/etc. into $BINS
+
+# --- Branch B: MAG quality + taxonomy (starts from $BINS) ---
+conda run -n checkm2 echidna run-checkm2 --genome-dir $BINS -o results/checkm2 --threads $T
+conda run -n gtdbtk  env GTDBTK_DATA_PATH=$GTDBTK_DB \
+                     echidna run-gtdbtk --genome-dir $BINS -o results/gtdbtk --cpus $T
+conda run -n gunc    echidna run-gunc --genome-dir $BINS -o results/gunc \
+                     --file-suffix .fa --threads $T --db-file $GUNC_DB
+conda run -n mimag   echidna run-mimag-rna --genome-dir $BINS -o results/mimag_rna --threads $T
+# per-contig taxonomy = the 2nd chimera signal (optional but recommended):
+conda run -n mmseqs2 echidna run-mmseqs-contigs --bins-dir $BINS --db $MMSEQS_DB \
+                     -o results/contig_taxonomy.tsv --threads $T
+echidna classify-contigs --bins-dir $BINS --mmseqs-output results/contig_taxonomy.tsv \
+                     -o results/contig_taxonomy.tsv                 # writes .bins.tsv
+echidna check-chimeras --bins-dir $BINS --gunc-dir results/gunc \
+                     --contig-taxonomy results/contig_taxonomy.tsv.bins.tsv \
+                     --checkm2-report results/checkm2/quality_report.tsv \
+                     --gtdbtk-dir results/gtdbtk -o results/chimera_report.tsv
+echidna organize-mags --checkm2-root results/checkm2 --genomes-dir $BINS \
+                     --gtdbtk-dir results/gtdbtk -o results/filtered --rename --copy \
+                     --mimag-rna-dir results/mimag_rna
+# optional: one joined per-MAG table
+echidna final-report --checkm2-report results/checkm2/quality_report.tsv \
+                     --gtdbtk-dir results/gtdbtk --mimag-rna-dir results/mimag_rna \
+                     --chimera-report results/chimera_report.tsv \
+                     --contig-taxonomy results/contig_taxonomy.tsv.bins.tsv \
+                     -o results/final_report.tsv
+```
+
+Prefer one command per branch? See Option C (`misassembly-wf` / `mag-quality-wf`)
+below. Want the full DAG on a cluster? Option B (Snakemake). Per-step detail with
+explanations is in the step-by-step guide further down.
+
 ## Run options
 
 Both ways use the same conda envs (see [installation.md](installation.md)).
@@ -20,15 +86,26 @@ conda run -n checkm2 echidna run-checkm2 --genome-dir bins/ -o results/checkm2 -
 conda run -n gtdbtk  env GTDBTK_DATA_PATH=/data/gtdbtk_r220 \
                      echidna run-gtdbtk  --genome-dir bins/ -o results/gtdbtk --cpus 40
 conda run -n gunc    echidna run-gunc    --genome-dir bins/ -o results/gunc \
-                     --file-suffix .fa --threads 40 --db-file /data/gunc/gunc_db_progenomes2.1.dmnd \
-                     --contig-taxonomy-output   # enables check-chimeras per-contig multi-clade signal
+                     --file-suffix .fa --threads 40 --db-file /data/gunc/gunc_db_progenomes2.1.dmnd
 conda run -n mimag   echidna run-mimag-rna --genome-dir bins/ -o results/mimag_rna --threads 40  # optional
 conda run -n echidna  echidna organize-mags --checkm2-root results/checkm2 --genomes-dir bins/ \
                      --gtdbtk-dir results/gtdbtk -o results/filtered --rename --copy \
                      --mimag-rna-dir results/mimag_rna          # drop this flag to skip the rRNA/tRNA HQ gate
+conda run -n mmseqs2  echidna run-mmseqs-contigs --bins-dir bins/ --db /data/mmseqs_gtdb/gtdb \
+                     -o results/contig_taxonomy.tsv --threads 40                  # optional 2nd chimera signal
+conda run -n echidna  echidna classify-contigs --bins-dir bins/ \
+                     --mmseqs-output results/contig_taxonomy.tsv -o results/contig_taxonomy.tsv  # writes .bins.tsv
 conda run -n echidna  echidna check-chimeras --bins-dir bins/ --gunc-dir results/gunc \
-                     --checkm2-report results/checkm2/quality_report.tsv -o results/chimera_report.tsv
+                     --contig-taxonomy results/contig_taxonomy.tsv.bins.tsv \
+                     --checkm2-report results/checkm2/quality_report.tsv --gtdbtk-dir results/gtdbtk \
+                     -o results/chimera_report.tsv
 ```
+
+The verdict uses two signals: GUNC (`pass.GUNC`) and the per-contig taxonomy
+foreign fraction from `classify-contigs` (`--contig-taxonomy`). Both chimeric ->
+`Chimeric`, one -> `Check`, neither -> `Clean`. CheckM2 contamination, GTDB-Tk
+and the GC outlier are reported as columns only. Give at least one of
+`--gunc-dir` / `--contig-taxonomy` (with only GUNC, a failing bin is `Check`).
 
 MIMAG HQ also requires 5S/16S/23S rRNA and tRNAs for at least 18 amino acids,
 which CheckM2 does not check. `run-mimag-rna` adds that evidence and
@@ -68,6 +145,34 @@ Don't have the envs and want Snakemake to build them for you instead? Use
 [`../workflow/README.md`](../workflow/README.md). For clusters see
 [hpc.md](hpc.md).
 
+### Option C - one-command branch wrappers (no Snakemake)
+
+Each branch also has a single subcommand that runs all its steps in order, each
+in the right env, resumable with `--from` / `--skip`. No Snakemake, no DAG file -
+just one process that shells out per step.
+
+```bash
+# misassembly-cleaning branch (PacBio HiFi): anvi -> process -> readchim
+# (only with Kraken2/Kaiju) -> classify -> filter
+echidna misassembly-wf \
+    --assembly assembly.fa --bam mapping.bam -o 01_misasm/ --threads 40 \
+    --anvio-env anvio-9 --checkm2-env checkm2 \
+    --kraken2-output kraken2_reads.txt --kraken2-report kraken2_report.txt   # optional readchim step
+
+# MAG quality + taxonomy branch: checkm2 -> organize -> gtdbtk -> gunc ->
+# mimag -> chimeras -> organize. Genome names are frozen after the first
+# organize so GUNC / check-chimeras / run-mimag-rna all match.
+echidna mag-quality-wf \
+    --bins-dir bins/ -o 02_magqc/ --threads 40 --tiers HQ,MQ \
+    --checkm2-env checkm2 --gtdbtk-env gtdbtk --gunc-env gunc --mimag-env mimag \
+    --gtdbtk-data /data/gtdbtk_r220 --gunc-db /data/gunc/gunc_db_progenomes2.1.dmnd \
+    --mmseqs-db /data/mmseqs_gtdb/gtdb          # optional: adds per-contig chimera signal
+```
+
+Both print their plan with `--dry-run`, resume a failed run with `--from <step>`,
+and drop steps with `--skip <step>[,<step>]`. See
+[command-reference.md](command-reference.md) for every flag (step names included).
+
 ## Complete workflow (misassembly branch to taxonomy)
 
 ```
@@ -88,7 +193,7 @@ assembly.fa
     |                           Flags contigs whose reads come from >=2 organisms.
     |
     +-------------------------->[3b] check-chimeras   (optional)
-    |                                GC + contamination + GUNC check on bins.
+    |                                Per-bin verdict from GUNC + per-contig taxonomy.
     |
     v
 [4] classify-clipping           (optional, recommended)
@@ -172,27 +277,35 @@ For names use `--kraken2-report` with Kraken2, or `--kaiju-names names.dmp` with
 Kaiju. BLAST is not used here on purpose: per-read BLAST against nt is orders of
 magnitude slower and short reads give low-specificity hits.
 
-### Step 3b - Detect chimeric MAGs (GC + GUNC, optional)
+### Step 3b - Detect chimeric MAGs (GUNC + per-contig taxonomy, optional)
 
-Run after binning for a composition + gene-consistency check on complete bins.
-Gene-level taxonomy drives the risk score; GC only corroborates (a single short
-contig can set the GC delta, so GC alone never reaches Medium). When GUNC was run
-with `--contig-taxonomy-output`, bins whose contigs span two or more clades get
-the strongest signal.
+Run after binning for a gene-consistency + composition check on complete bins.
+The verdict uses exactly two signals: GUNC gene-level (`pass.GUNC == False` ->
+chimeric) and the per-contig taxonomy foreign LENGTH fraction from
+`classify-contigs` (`>= --min-foreign-frac` -> chimeric). Both chimeric ->
+`Chimeric`, one -> `Check`, neither -> `Clean`. CheckM2 contamination, GTDB-Tk
+taxonomy and a strong GC outlier are reported as columns only - they do not
+change the verdict.
 
 ```bash
+# the per-contig taxonomy signal: run-mmseqs-contigs -> classify-contigs
+echidna run-mmseqs-contigs --bins-dir 06_bins/ --db /data/mmseqs_gtdb/gtdb \
+    -o 02_chimera/contig_taxonomy.tsv --threads 40
+echidna classify-contigs --bins-dir 06_bins/ \
+    --mmseqs-output 02_chimera/contig_taxonomy.tsv \
+    -o 02_chimera/contig_taxonomy.tsv                       # writes <out>.bins.tsv
+
 echidna check-chimeras \
     --bins-dir 06_bins/ \
-    --output 02_chimera/gc_chimera_report.tsv \
-    --gtdbtk-dir 09_taxonomy/ \
-    --checkm2-report 07_checkm2/quality_report.tsv \
+    --output 02_chimera/chimera_report.tsv \
     --gunc-dir 07_gunc/ \
     --contig-taxonomy 02_chimera/contig_taxonomy.tsv.bins.tsv \
-    --gc-window 5000 --gc-step 2500
+    --gtdbtk-dir 09_taxonomy/ \
+    --checkm2-report 07_checkm2/quality_report.tsv
 ```
 
-The per-contig taxonomy signal comes from classify-contigs (MMseqs/Kraken2/Kaiju),
-weighted by the foreign LENGTH fraction, via `--contig-taxonomy`.
+The verdict needs at least one of `--gunc-dir` / `--contig-taxonomy`; with only
+GUNC a failing bin is `Check`, not `Chimeric`.
 
 Pre-dRep filter: exclude rows with `chimera_verdict == Chimeric` (GUNC and
 per-contig taxonomy both chimeric); send `Check` to manual review (the

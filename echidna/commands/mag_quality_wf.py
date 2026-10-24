@@ -7,10 +7,16 @@ Chains the MAG quality + taxonomy branch end to end, each sub-command in its env
   checkm2    run-checkm2          (CheckM2 env)
   organize1  organize-mags        tier the bins (original names, symlinks)
   gtdbtk     run-gtdbtk           (GTDB-Tk env; GTDBTK_DATA_PATH)
-  gunc       run-gunc             (GUNC env; --contig-taxonomy-output)
+  gunc       run-gunc             (GUNC env)
+  mmseqs     run-mmseqs-contigs   (MMseqs2 env; only with --mmseqs-db)
+  contigtax  classify-contigs     per-contig taxonomy -> foreign-fraction TSV
   mimag      run-mimag-rna        (MIMAG env; optional, full-MIMAG HQ gate)
-  chimeras   check-chimeras       GC + GUNC + taxonomy chimera report
+  chimeras   check-chimeras       verdict from GUNC (+ per-contig taxonomy)
   organize2  organize-mags        final rename + quality gate
+
+The chimera verdict uses GUNC alone unless --mmseqs-db is given; with it the
+mmseqs + contigtax steps add the per-contig taxonomy signal, so check-chimeras
+can return a real Chimeric (both signals) verdict.
 
 The genome names are frozen after organize1 so GUNC, check-chimeras and mimag all
 see the same names (no rename until organize2). Start binning yourself; this
@@ -26,7 +32,8 @@ from typing import List
 from ..utils.workflow_run import Step, execute_plan
 from ..utils.logging import print_header
 
-ALL_KEYS = ['checkm2', 'organize1', 'gtdbtk', 'gunc', 'mimag', 'chimeras', 'organize2']
+ALL_KEYS = ['checkm2', 'organize1', 'gtdbtk', 'gunc', 'mmseqs', 'contigtax',
+            'mimag', 'chimeras', 'organize2']
 
 
 def build_plan(args) -> List[Step]:
@@ -40,6 +47,10 @@ def build_plan(args) -> List[Step]:
     selected = filtered_dir / 'Selected'
     tax_dir = out / '03_taxonomy'
     gunc_dir = out / '04_gunc'
+    ctax_dir = out / '04b_contig_taxonomy'
+    mmseqs_tsv = ctax_dir / 'contig_taxonomy.tsv'
+    classify_out = ctax_dir / 'classify_contigs.tsv'
+    contig_bins_tsv = Path(str(classify_out) + '.bins.tsv')
     mimag_dir = out / '05_mimag'
     chimera_report = out / '06_chimera' / 'chimera_report.tsv'
     final_dir = out / '07_final'
@@ -73,10 +84,27 @@ def build_plan(args) -> List[Step]:
 
     gu = ['echidna', 'run-gunc', '--selected-dir', str(selected),
           '-o', str(gunc_dir), '--file-suffix', suffix,
-          '--threads', str(args.threads), '--contig-taxonomy-output']
+          '--threads', str(args.threads)]
     if args.gunc_db:
         gu += ['--db-file', str(args.gunc_db)]
     steps.append(Step('gunc', 'run-gunc', args.gunc_env, gu))
+
+    # Per-contig taxonomy = the second chimera signal. Only when an MMseqs2 DB is
+    # given; otherwise the verdict rests on GUNC alone.
+    use_contig_tax = args.mmseqs_db is not None
+    if use_contig_tax:
+        steps.append(Step(
+            'mmseqs', 'run-mmseqs-contigs', args.mmseqs_env,
+            ['echidna', 'run-mmseqs-contigs', '--bins-dir', str(selected),
+             '--db', str(args.mmseqs_db), '-o', str(mmseqs_tsv),
+             '--threads', str(args.threads), '--extensions', ext],
+        ))
+        steps.append(Step(
+            'contigtax', 'classify-contigs', args.echidna_env,
+            ['echidna', 'classify-contigs', '--bins-dir', str(selected),
+             '--mmseqs-output', str(mmseqs_tsv), '-o', str(classify_out),
+             '--extensions', ext],
+        ))
 
     if use_mimag:
         mi = ['echidna', 'run-mimag-rna', '--selected-dir', str(selected),
@@ -86,12 +114,12 @@ def build_plan(args) -> List[Step]:
             mi += ['--split-by-domain', '--gtdbtk-dir', str(tax_dir)]
         steps.append(Step('mimag', 'run-mimag-rna', args.mimag_env, mi))
 
-    steps.append(Step(
-        'chimeras', 'check-chimeras', args.echidna_env,
-        ['echidna', 'check-chimeras', '--bins-dir', str(selected),
-         '--gunc-dir', str(gunc_dir), '--checkm2-report', str(quality_report),
-         '--gtdbtk-dir', str(tax_dir), '-o', str(chimera_report)],
-    ))
+    chim = ['echidna', 'check-chimeras', '--bins-dir', str(selected),
+            '--gunc-dir', str(gunc_dir), '--checkm2-report', str(quality_report),
+            '--gtdbtk-dir', str(tax_dir), '-o', str(chimera_report)]
+    if use_contig_tax:
+        chim += ['--contig-taxonomy', str(contig_bins_tsv)]
+    steps.append(Step('chimeras', 'check-chimeras', args.echidna_env, chim))
 
     o2 = ['echidna', 'organize-mags', '--checkm2-root', str(ckm2_dir),
           '--genomes-dir', str(args.bins_dir), '-o', str(final_dir),
@@ -117,10 +145,13 @@ Binning is done upstream; this takes the bins.
     --bins-dir bins/ -o mag_wf/ --threads 40 --tiers HQ,MQ \\
     --gtdbtk-data /data/gtdbtk_r220 \\
     --gunc-db /data/gunc/gunc_db_gtdb214.dmnd \\
+    --mmseqs-db /data/mmseqs_gtdb/gtdb \\
     --checkm2-env checkm2 --gtdbtk-env gtdbtk --gunc-env gunc --mimag-env mimag \\
     --split-by-domain
 
-Steps: checkm2 -> organize1 -> gtdbtk -> gunc -> mimag -> chimeras -> organize2.
+Steps: checkm2 -> organize1 -> gtdbtk -> gunc -> [mmseqs -> contigtax] -> mimag ->
+chimeras -> organize2. The mmseqs/contigtax steps run only with --mmseqs-db and
+add the per-contig taxonomy signal to the chimera verdict (GUNC-only without it).
 Names are frozen after organize1 so gunc/chimeras/mimag match. Skip the rRNA/tRNA
 gate with --skip-mimag. Resume with --from <step>, drop with --skip a,b, preview
 with --dry-run.
@@ -146,6 +177,9 @@ with --dry-run.
                         help='Conda env with GUNC (default: gunc)')
     parser.add_argument('--mimag-env', default='mimag',
                         help='Conda env with barrnap + tRNAscan-SE (default: mimag)')
+    parser.add_argument('--mmseqs-env', default='mmseqs2',
+                        help='Conda env with MMseqs2 (default: mmseqs2); used only '
+                             'when --mmseqs-db is given')
 
     parser.add_argument('--gtdbtk-data', type=Path,
                         help='GTDB-Tk reference data dir (sets GTDBTK_DATA_PATH)')
@@ -153,6 +187,11 @@ with --dry-run.
                         help='GUNC diamond database (.dmnd); else uses $GUNC_DB')
     parser.add_argument('--checkm2-db', type=Path,
                         help='CheckM2 database (.dmnd); else CheckM2 default')
+    parser.add_argument('--mmseqs-db', type=Path,
+                        help='MMseqs2 taxonomy DB prefix (e.g. /data/mmseqs_gtdb/gtdb). '
+                             'When given, adds the mmseqs + contigtax steps so the '
+                             'chimera verdict gets the per-contig taxonomy signal; '
+                             'without it the verdict uses GUNC alone.')
 
     parser.add_argument('--split-by-domain', action='store_true',
                         help='run-mimag-rna picks bac/arc per genome from GTDB-Tk')
@@ -173,7 +212,10 @@ def run(args):
     print_header("Echidna - MAG quality workflow")
 
     if not args.dry_run:
-        for sub in ('01_checkm2', '06_chimera'):
+        subdirs = ['01_checkm2', '06_chimera']
+        if args.mmseqs_db is not None:
+            subdirs.append('04b_contig_taxonomy')
+        for sub in subdirs:
             (args.output_dir / sub).mkdir(parents=True, exist_ok=True)
 
     skip = [s.strip() for s in args.skip_steps.split(',')] if args.skip_steps else None

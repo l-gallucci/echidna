@@ -314,6 +314,35 @@ Optional:
   --stats PATH                Save statistics to TSV
 ```
 
+## check-zero-coverage
+
+Identifies assembler-invented sequence: zero-coverage regions that no read
+supports. Each region is validated by BLAST (does it match anything real?) and
+optionally by Meryl k-mer support from the reads. Zero-coverage spans come either
+from anvi'o `*-zero_cov.txt` files (`--zero-cov-dir`) or are computed on the fly
+from a sorted BAM (`--bam`).
+
+```
+Required:
+  -a, --assembly PATH         Assembly FASTA
+  --reads PATH                Long-read source (FASTA/FASTQ, optionally gzip)
+  -o, --output PATH           Output TSV report
+  one source (mutually exclusive):
+    --zero-cov-dir DIR        Directory with *-zero_cov.txt files from anvi'o, or
+    --bam PATH                Sorted, indexed BAM (computes zero-cov on the fly)
+
+Optional:
+  --min-length BP             Min zero-coverage region length to analyse (default: 500)
+  --min-mapq INT              Min mapping quality for depth (--bam only; default: 20)
+  --evalue FLOAT              BLAST e-value cutoff (default: 1e-5)
+  --max-target-seqs INT       BLAST max target seqs per query (default: 1)
+  --threads INT               Threads for BLAST and Meryl (default: 4)
+  --meryl                     Enable Meryl k-mer support validation (needs meryl in PATH)
+  --meryl-k INT               k-mer size for Meryl (default: 21)
+  --keep-db                   Keep BLAST database files after the run
+  --dry-run                   Show what would be done without running BLAST
+```
+
 ## organize-mags  (formerly filter-checkm2)
 
 Splits genomes into `Selected/HQ`, `Selected/MQ`, `Selected/LQ` by MiMAG tier, and
@@ -463,8 +492,11 @@ Optional:
   --threads INT               Threads (default: 1)
   --db-file PATH              GUNC diamond database (.dmnd); else uses $GUNC_DB
   --tiers LIST                Tiers to process (default: HQ,MQ,LQ)
-  --contig-taxonomy-output    Also write per-contig taxonomy (<genome>.contig_assignments.tsv);
-                              check-chimeras consumes it for the multi-clade signal
+  --contig-taxonomy-output    Also write GUNC's per-contig gene taxonomy
+                              (<genome>.contig_assignments.tsv), for inspection.
+                              NOTE: check-chimeras does NOT read this file; its
+                              per-contig signal comes from classify-contigs
+                              (--contig-taxonomy <out>.bins.tsv) instead.
   --gunc-args STR             Extra arguments passed to gunc run
 ```
 
@@ -577,10 +609,12 @@ Optional:
 ## mag-quality-wf
 
 Runs the whole MAG quality + taxonomy branch from a bin set, each step in the
-right env. Steps: `checkm2` -> `organize1` -> `gtdbtk` -> `gunc` -> `mimag` ->
-`chimeras` -> `organize2`. Genome names are frozen after `organize1` so GUNC,
-check-chimeras and run-mimag-rna match; GUNC is run with
-`--contig-taxonomy-output`.
+right env. Steps: `checkm2` -> `organize1` -> `gtdbtk` -> `gunc` ->
+`[mmseqs -> contigtax]` -> `mimag` -> `chimeras` -> `organize2`. Genome names are
+frozen after `organize1` so GUNC, check-chimeras and run-mimag-rna match. The
+`mmseqs` + `contigtax` steps run only when `--mmseqs-db` is given; they add the
+per-contig taxonomy signal so `check-chimeras` can return a real `Chimeric`
+verdict (both signals). Without `--mmseqs-db` the verdict rests on GUNC alone.
 
 ```
 Required:
@@ -593,9 +627,12 @@ Optional:
   --genome-ext STR            Bin extension without dot (default: fa)
   --echidna-env NAME           Env for pure-Echidna steps (default: current env)
   --checkm2-env / --gtdbtk-env / --gunc-env / --mimag-env   tool envs
+  --mmseqs-env NAME           Env with MMseqs2 (default: mmseqs2; only with --mmseqs-db)
   --gtdbtk-data PATH          GTDB-Tk data dir (sets GTDBTK_DATA_PATH)
   --gunc-db PATH              GUNC .dmnd (else $GUNC_DB)
   --checkm2-db PATH           CheckM2 .dmnd (else CheckM2 default)
+  --mmseqs-db PREFIX          MMseqs2 taxonomy DB prefix; adds the mmseqs + contigtax
+                              steps and the per-contig chimera signal (omit = GUNC-only)
   --split-by-domain           run-mimag-rna picks bac/arc per genome from GTDB-Tk
   --skip-mimag                Skip the rRNA/tRNA MIMAG HQ gate
   --from STEP                 Resume at a step

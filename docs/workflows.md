@@ -66,8 +66,11 @@ run-mimag-rna must see the same genome names, so do not rename between them (see
 | 7 | `check-chimeras` | none (uses gunc + checkm2 + gtdbtk) | `chimera_report.tsv` (TSV) | echidna |
 | 8 | `organize-mags` (final) | none (renames + gates on all of the above) | final MAGs (DIR) | echidna |
 
-run-gunc at step 5 should use `--contig-taxonomy-output` so step 7 gets the
-per-contig multi-clade signal. run-mimag-rna is optional (full-MIMAG HQ gate).
+For the second chimera signal at step 7, add a per-contig taxonomy pass
+(`run-mmseqs-contigs` -> `classify-contigs`) and give check-chimeras
+`--contig-taxonomy <out>.bins.tsv`; without it the verdict rests on GUNC alone
+(a failing bin is then `Check`, not `Chimeric`). run-mimag-rna is optional
+(full-MIMAG HQ gate).
 
 ## How to run
 
@@ -87,6 +90,7 @@ echidna misassembly-wf \
 echidna mag-quality-wf \
     --bins-dir bins/ -o mag_wf/ --threads 40 --tiers HQ,MQ \
     --gtdbtk-data /data/gtdbtk_r220 --gunc-db /data/gunc/gunc_db_gtdb214.dmnd \
+    --mmseqs-db /data/mmseqs_gtdb/gtdb \
     --split-by-domain
 ```
 
@@ -94,8 +98,11 @@ Both accept `--dry-run` (print the commands without running), `--from <step>`
 (resume after fixing a failure) and `--skip <step[,step]>`. The step keys are
 printed by `--dry-run` and listed in [command-reference.md](command-reference.md).
 `mag-quality-wf` freezes genome names after the first tiering so GUNC,
-check-chimeras and run-mimag-rna all match (no rename until the final step), and
-passes `--contig-taxonomy-output` to GUNC automatically.
+check-chimeras and run-mimag-rna all match (no rename until the final step). Pass
+`--mmseqs-db <prefix>` to add the per-contig taxonomy signal (it inserts
+`run-mmseqs-contigs` + `classify-contigs` and feeds check-chimeras
+`--contig-taxonomy`, so a bin can reach a real `Chimeric` verdict); without it the
+verdict rests on GUNC alone.
 
 The `*-wf` commands shell out to `conda run -n <env> ...`, so the tool envs must
 exist and have Echidna installed (including the anvi'o env, for

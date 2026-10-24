@@ -30,6 +30,7 @@ Assembly QC and misassembly handling:
 
 | Command | What it does |
 |---|---|
+| `run-anvi-misassemblies` | Detect soft-clipping misassembly positions (anvi'o wrapper, PacBio HiFi) |
 | `process-large-contigs` | Extract, QC and filter large contigs before binning |
 | `classify-clipping` | Label each clipping position (repeat / deletion / chimeric_join / ...) from BAM evidence |
 | `filter-misassemblies` | Split or remove contigs at misassembly positions |
@@ -41,8 +42,11 @@ Chimera detection:
 | Command | What it does |
 |---|---|
 | `check-read-chimeras` | Chimeras from read-level taxonomy (Kraken2 or Kaiju + BAM) |
-| `check-chimeras` | Chimeric MAGs from GC + contamination + GUNC + GTDB signals |
+| `check-chimeras` | Per-bin chimera verdict from GUNC + per-contig taxonomy (CheckM2 / GTDB-Tk / GC reported) |
 | `run-gunc` | Gene-level chimerism/contamination (GUNC wrapper) |
+| `run-mmseqs-contigs` | MMseqs2 taxonomy on bin contigs -> per-contig TSV for `classify-contigs` |
+| `classify-contigs` | Flag bins whose contigs span >=2 taxa (per-contig taxonomy foreign fraction) |
+| `check-ssu-taxonomy` | Check each MAG's 16S agrees with its GTDB-Tk taxonomy (blastn) |
 
 MAG quality and taxonomy:
 
@@ -52,6 +56,14 @@ MAG quality and taxonomy:
 | `run-gtdbtk` | Taxonomy classification (GTDB-Tk wrapper) |
 | `run-mimag-rna` | MIMAG rRNA (5S/16S/23S) + tRNA criterion (barrnap + tRNAscan-SE) |
 | `organize-mags` | Split genomes into HQ/MQ/LQ, rename `<sample>__<taxon>__<orig>`, optional full-MIMAG HQ gate |
+| `final-report` | Join per-MAG signals (CheckM2, GTDB-Tk, MIMAG, chimera, 16S) into one table |
+
+One-command workflows (run a whole branch, each step in its own env):
+
+| Command | What it does |
+|---|---|
+| `misassembly-wf` | Whole misassembly-cleaning branch (anvi -> process -> readchim -> classify -> filter) |
+| `mag-quality-wf` | Whole MAG quality + taxonomy branch (checkm2 -> organize -> gtdbtk -> gunc -> mimag -> chimeras) |
 
 Setup and environment helpers:
 
@@ -69,8 +81,9 @@ Every subcommand has `-h/--help`.
   model, external tools, databases, tests
 - [docs/workflows.md](docs/workflows.md) - the two branches (misassembly cleaning,
   MAG quality), per-step input/output and file types, with data-flow diagrams
-- [docs/pipeline.md](docs/pipeline.md) - run options (standalone or Snakemake),
-  complete workflow, step-by-step guide
+- [docs/pipeline.md](docs/pipeline.md) - **Quick start** (run everything yourself,
+  copy-paste), run options (standalone, `*-wf` wrappers or Snakemake), complete
+  workflow, step-by-step guide
 - [docs/hpc.md](docs/hpc.md) - running on a SLURM cluster
 - [docs/command-reference.md](docs/command-reference.md) - every flag of every
   command

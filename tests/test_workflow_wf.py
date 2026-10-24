@@ -86,7 +86,8 @@ def _mag_args(**over):
                 bins_dir=Path('bins'), threads=40, checkm2_db=None,
                 checkm2_env='checkm2', echidna_env=None, tiers='HQ,MQ',
                 gtdbtk_data=None, gtdbtk_env='gtdbtk', gunc_db=None,
-                gunc_env='gunc', split_by_domain=False, mimag_env='mimag')
+                gunc_env='gunc', split_by_domain=False, mimag_env='mimag',
+                mmseqs_db=None, mmseqs_env='mmseqs2')
     base.update(over)
     return argparse.Namespace(**base)
 
@@ -97,11 +98,39 @@ def test_mag_plan_full_order():
         ['checkm2', 'organize1', 'gtdbtk', 'gunc', 'mimag', 'chimeras', 'organize2']
 
 
-def test_mag_plan_gunc_has_contig_taxonomy():
+def test_mag_plan_gunc_db_file_but_no_contig_taxonomy_output():
+    # --contig-taxonomy-output is no longer passed: check-chimeras does not read
+    # it; the per-contig signal comes from the mmseqs/contigtax steps instead.
     steps = mag_quality_wf.build_plan(_mag_args(gunc_db=Path('db.dmnd')))
     gunc = next(s for s in steps if s.key == 'gunc')
-    assert '--contig-taxonomy-output' in gunc.cmd
+    assert '--contig-taxonomy-output' not in gunc.cmd
     assert '--db-file' in gunc.cmd
+
+
+def test_mag_plan_no_mmseqs_db_omits_per_contig_steps_and_flag():
+    steps = mag_quality_wf.build_plan(_mag_args())
+    keys = [s.key for s in steps]
+    assert 'mmseqs' not in keys and 'contigtax' not in keys
+    chim = next(s for s in steps if s.key == 'chimeras')
+    assert '--contig-taxonomy' not in chim.cmd
+
+
+def test_mag_plan_mmseqs_db_wires_per_contig_signal():
+    steps = mag_quality_wf.build_plan(_mag_args(mmseqs_db=Path('/data/mmseqs/gtdb')))
+    keys = [s.key for s in steps]
+    assert keys == ['checkm2', 'organize1', 'gtdbtk', 'gunc', 'mmseqs',
+                    'contigtax', 'mimag', 'chimeras', 'organize2']
+    mm = next(s for s in steps if s.key == 'mmseqs')
+    assert mm.env == 'mmseqs2'
+    assert mm.cmd[:2] == ['echidna', 'run-mmseqs-contigs']
+    assert '--db' in mm.cmd and '/data/mmseqs/gtdb' in mm.cmd
+    ct = next(s for s in steps if s.key == 'contigtax')
+    assert ct.cmd[:2] == ['echidna', 'classify-contigs']
+    assert '--mmseqs-output' in ct.cmd
+    # check-chimeras consumes the per-bin TSV classify-contigs writes
+    chim = next(s for s in steps if s.key == 'chimeras')
+    assert '--contig-taxonomy' in chim.cmd
+    assert 'MOUT/04b_contig_taxonomy/classify_contigs.tsv.bins.tsv' in chim.cmd
 
 
 def test_mag_plan_gtdbtk_sets_data_path_env():
