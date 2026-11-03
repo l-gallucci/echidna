@@ -181,14 +181,13 @@ def _drop_accession_token(title: str) -> str:
 
 
 def normalize_taxon(name: Optional[str]) -> str:
-    """Normalise a taxon name for comparison: lowercase, drop a GTDB
-    polyphyly suffix (Firmicutes_A -> firmicutes). Empty for None/Unclassified."""
+    """Normalise a taxon name for comparison: lowercase, preserve GTDB
+    clade suffixes (_A and _B remain distinct). Empty for None/Unclassified."""
     if not name:
         return ''
     n = name.strip()
     if n.lower() in ('unclassified', 'na', 'n/a', ''):
         return ''
-    n = re.sub(r'_[A-Z]+$', '', n)
     return n.lower()
 
 

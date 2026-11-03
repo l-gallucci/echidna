@@ -12,11 +12,13 @@ This only reads TSVs already written by the other commands; it runs nothing and
 needs no external tools.
 """
 
+import csv
 import sys
 import argparse
 from pathlib import Path
 from typing import Dict, Set
 
+from ..utils.fasta import read_fasta_streaming, circular_annotation
 from ..utils.checkm2 import parse_quality_report, find_quality_reports
 from ..utils.chimera import parse_gtdbtk_summary, extract_taxonomy_level
 from ..utils.rrna import parse_mimag_rna_summary
@@ -99,6 +101,8 @@ pass; apply your own thresholds).
                         help='classify-contigs <output>.bins.tsv')
     parser.add_argument('--ssu-report', type=Path,
                         help='check-ssu-taxonomy ssu_taxonomy.tsv')
+    parser.add_argument('--organized-quality', type=Path,
+                        help='organize-mags merged_quality.tsv; adds organized_tier without changing CheckM2 tier')
     parser.add_argument('--genomes-dir', type=Path,
                         help='Optional: define the genome set from this directory '
                              '(else the union of names across the inputs)')
@@ -136,15 +140,32 @@ def run(args):
         if m:
             log_info(f"  {label}: {len(m):,} genomes")
 
+    organized_tiers = {}
+    if args.organized_quality:
+        with open(args.organized_quality) as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            if not {'name', 'tier'}.issubset(reader.fieldnames or []):
+                raise ValueError('Expected name/tier columns in --organized-quality')
+            for row in reader:
+                name = norm_name(row['name'])
+                if name in organized_tiers:
+                    raise ValueError(f'Duplicate organized-quality ID {name}')
+                organized_tiers[name] = row['tier']
+    structures = {}
     # Universe of genomes
     universe: Set[str] = set()
     if args.genomes_dir:
         exts = [e.strip() for e in args.extensions.split(',')]
         for ext in exts:
             for p in args.genomes_dir.rglob(f"*.{ext}"):
-                universe.add(norm_name(p.name))
+                name = norm_name(p.name)
+                universe.add(name)
+                records = list(read_fasta_streaming(p, full_header=True))
+                annotated = circular_annotation(records[0][0]) if len(records) == 1 else None
+                structures[name] = {'n_contigs': len(records),
+                                    'circular_annotated': annotated if annotated is not None else 'NA'}
     else:
-        for m in (checkm2, taxonomy, mimag, chimera, contig, ssu):
+        for m in (checkm2, taxonomy, mimag, chimera, contig, ssu, organized_tiers):
             universe.update(m.keys())
 
     if not universe:
@@ -153,7 +174,8 @@ def run(args):
 
     print_section(f"Joining {len(universe):,} genomes")
     rows = build_report(universe, checkm2=checkm2, taxonomy=taxonomy, mimag=mimag,
-                        chimera=chimera, contig=contig, ssu=ssu, gunc_pass=gunc_pass)
+                        chimera=chimera, contig=contig, ssu=ssu, gunc_pass=gunc_pass,
+                        organized_tiers=organized_tiers, structures=structures)
     write_report(rows, args.output)
     log_info(f"Final report written: {args.output}")
 

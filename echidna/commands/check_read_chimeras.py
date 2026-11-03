@@ -13,9 +13,8 @@ profiles, coverage, or when assembler graphs are not cleanly resolved.
 The result: a single contig that is literally a mosaic of two genomes.
 
 Standard sequence-composition checks (GC content, tetranucleotide freq.)
-can miss this when the organisms have similar GC. The only reliable signal
-is the taxonomy of the reads themselves: if reads mapping to one contig
-come from two different organisms, the contig is chimeric.
+can miss this when the organisms have similar GC. Read taxonomy adds a useful screening signal, subject to reference bias and
+cross-mapping. A taxonomic split requires review; it does not alone prove a join.
 
 Approach
 --------
@@ -69,6 +68,7 @@ from ..utils.read_taxonomy import (
     assess_read_chimera_risk,
     taxon_label,
 )
+from ..utils.contig_taxonomy import parse_nodes_dmp, resolve_at_rank, VALID_RANKS
 from ..utils.fasta import read_fasta_streaming
 from ..utils.validation import validate_file_exists
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
@@ -270,7 +270,7 @@ def print_summary(contig_rows: List[Dict]):
         print_section("TOP FLAGGED CONTIGS")
         for row in sorted(
             high_risk,
-            key=lambda r: (r['chimera_risk'] != 'High', float(row['dominant_frac']))
+            key=lambda r: (r['chimera_risk'] != 'High', float(r['dominant_frac']))
         )[:10]:
             print(
                 f"  {row['contig'][:50]:<50s}  "
@@ -375,6 +375,11 @@ Examples
     parser.add_argument('--assembly', type=Path,
                         help='Assembly FASTA (provides contig lengths for windowed analysis)')
 
+    parser.add_argument('--taxonomy-rank', choices=VALID_RANKS,
+                        help='Optional common rank for read taxonomy; requires --nodes-dmp')
+    parser.add_argument('--nodes-dmp', type=Path,
+                        help='Taxonomy nodes from the SAME classifier database (for --taxonomy-rank)')
+
     # Filtering
     parser.add_argument('--min-mapq', type=int, default=20,
                         help='Minimum mapping quality to include a read (default: 20)')
@@ -442,6 +447,14 @@ def run(args):
     else:
         read_taxid = parse_kraken2_output(args.kraken2_output)
 
+    if args.taxonomy_rank:
+        if not args.nodes_dmp:
+            raise ValueError('--taxonomy-rank requires --nodes-dmp from the classifier database')
+        validate_file_exists(args.nodes_dmp, 'Taxonomy nodes')
+        nodes = parse_nodes_dmp(args.nodes_dmp)
+        read_taxid = {name: (resolve_at_rank(taxid, args.taxonomy_rank, nodes) or 0)
+                      if taxid > 0 else taxid for name, taxid in read_taxid.items()}
+
     taxid_info: Dict = {}
     if use_kaiju:
         if args.kaiju_names:
@@ -503,9 +516,8 @@ def run(args):
         report_path = args.output_dir / "chimera_read_report.tsv"
         write_tsv(contig_rows, CONTIG_FIELDS, report_path)
 
-        if window_rows:
-            windows_path = args.output_dir / "chimera_read_windows.tsv"
-            write_tsv(window_rows, WINDOW_FIELDS, windows_path)
+        windows_path = args.output_dir / "chimera_read_windows.tsv"
+        write_tsv(window_rows, WINDOW_FIELDS, windows_path)
     else:
         log_warning("DRY-RUN: output files not written")
 

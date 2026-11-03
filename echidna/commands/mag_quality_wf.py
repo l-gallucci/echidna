@@ -109,14 +109,14 @@ def build_plan(args) -> List[Step]:
     if use_mimag:
         mi = ['echidna', 'run-mimag-rna', '--selected-dir', str(selected),
               '-o', str(mimag_dir), '--threads', str(args.threads),
-              '--tiers', args.tiers]
+              '--tiers', args.tiers, '--extension', ext]
         if args.split_by_domain:
             mi += ['--split-by-domain', '--gtdbtk-dir', str(tax_dir)]
         steps.append(Step('mimag', 'run-mimag-rna', args.mimag_env, mi))
 
     chim = ['echidna', 'check-chimeras', '--bins-dir', str(selected),
             '--gunc-dir', str(gunc_dir), '--checkm2-report', str(quality_report),
-            '--gtdbtk-dir', str(tax_dir), '-o', str(chimera_report)]
+            '--gtdbtk-dir', str(tax_dir), '--extensions', ext, '-o', str(chimera_report)]
     if use_contig_tax:
         chim += ['--contig-taxonomy', str(contig_bins_tsv)]
     steps.append(Step('chimeras', 'check-chimeras', args.echidna_env, chim))

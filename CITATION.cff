@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite this repository and the version used."
+type: software
+title: "Echidna: metagenomic assembly, MAG integrity and chimera screening"
+authors:
+  - family-names: Gallucci
+    given-names: Luigi
+    # orcid: "https://orcid.org/0000-0000-0000-0000"  # replace with your real ORCID
+    # affiliation: "Add your affiliation here"
+repository-code: "https://github.com/l-gallucci/echidna"
+url: "https://github.com/l-gallucci/echidna"
+license: MIT
+keywords:
+  - metagenomics
+  - genome quality control
+  - metagenome-assembled genomes
+  - chimera screening
+abstract: >-
+  A Python command-line toolkit orchestrating assembly misassembly handling,
+  MAG quality assessment, taxonomy and chimera screening using external
+  bioinformatics tools. The distribution is named echidnaxomics; its command
+  and Python package are named echidna.
+# Before release, add version and date-released matching the final tag.
+# After archiving the release, add the actual DOI. Do not invent a DOI.

@@ -1,0 +1,191 @@
+{
+  "syntax_feature_version": "3.8 grammar only, not runtime compatibility",
+  "syntax_files": [
+    "docs/img/gen_diagrams.py",
+    "echidna/__init__.py",
+    "echidna/__main__.py",
+    "echidna/commands/__init__.py",
+    "echidna/commands/check_chimeras.py",
+    "echidna/commands/check_envs.py",
+    "echidna/commands/check_read_chimeras.py",
+    "echidna/commands/check_ssu_taxonomy.py",
+    "echidna/commands/check_zero_coverage.py",
+    "echidna/commands/classify_clipping.py",
+    "echidna/commands/classify_contigs.py",
+    "echidna/commands/fetch_databases.py",
+    "echidna/commands/filter_checkm2.py",
+    "echidna/commands/filter_misassemblies.py",
+    "echidna/commands/final_report.py",
+    "echidna/commands/mag_quality_wf.py",
+    "echidna/commands/misassembly_wf.py",
+    "echidna/commands/process_large_contigs.py",
+    "echidna/commands/remove_hq_contigs.py",
+    "echidna/commands/run_anvi_misassemblies.py",
+    "echidna/commands/run_checkm2.py",
+    "echidna/commands/run_gtdbtk.py",
+    "echidna/commands/run_gunc.py",
+    "echidna/commands/run_mimag_rna.py",
+    "echidna/commands/run_mmseqs_contigs.py",
+    "echidna/commands/setup_workflow.py",
+    "echidna/utils/__init__.py",
+    "echidna/utils/bam_stats.py",
+    "echidna/utils/checkm2.py",
+    "echidna/utils/chimera.py",
+    "echidna/utils/contig_taxonomy.py",
+    "echidna/utils/fasta.py",
+    "echidna/utils/final_report.py",
+    "echidna/utils/logging.py",
+    "echidna/utils/misassembly.py",
+    "echidna/utils/names.py",
+    "echidna/utils/read_taxonomy.py",
+    "echidna/utils/repeat_blast.py",
+    "echidna/utils/rrna.py",
+    "echidna/utils/ssu_taxonomy.py",
+    "echidna/utils/validation.py",
+    "echidna/utils/workflow_run.py",
+    "echidna/utils/zero_coverage.py",
+    "setup.py",
+    "tests/test_bam_stats.py",
+    "tests/test_checkm2.py",
+    "tests/test_chimera.py",
+    "tests/test_classify_clipping.py",
+    "tests/test_contig_taxonomy.py",
+    "tests/test_fasta.py",
+    "tests/test_final_report.py",
+    "tests/test_mimag_domain.py",
+    "tests/test_names.py",
+    "tests/test_organize_mags.py",
+    "tests/test_process_large_contigs.py",
+    "tests/test_read_taxonomy.py",
+    "tests/test_rrna.py",
+    "tests/test_setup_workflow.py",
+    "tests/test_ssu_taxonomy.py",
+    "tests/test_validation.py",
+    "tests/test_workflow_wf.py"
+  ],
+  "help_results": [
+    {
+      "command": "--version",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "--help",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "check-chimeras",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "check-envs",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "check-read-chimeras",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "check-ssu-taxonomy",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "check-zero-coverage",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "classify-clipping",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "classify-contigs",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "fetch-databases",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "filter-misassemblies",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "final-report",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "mag-quality-wf",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "misassembly-wf",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "organize-mags",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "process-large-contigs",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "remove-hq-contigs",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-anvi-misassemblies",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-checkm2",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-gtdbtk",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-gunc",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-mimag-rna",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "run-mmseqs-contigs",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "command": "setup-workflow",
+      "exit": 0,
+      "error": ""
+    }
+  ],
+  "shell_syntax_exit": 0,
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "scope": "Tracked checkout only; historical .claude worktrees excluded"
+}

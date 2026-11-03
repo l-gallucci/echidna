@@ -1,0 +1,53 @@
+{% set name = "echidnaxomics" %}
+{% set version = "@VERSION@" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://files.pythonhosted.org/packages/source/e/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: @SHA256@
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  entry_points:
+    - echidna = echidna.__main__:main
+
+requirements:
+  host:
+    - python >=3.8
+    - pip
+    - setuptools >=61
+    - wheel
+  run:
+    - python >=3.8
+
+test:
+  imports:
+    - echidna
+    - echidna.commands.check_chimeras
+  commands:
+    - echidna --help
+    - echidna --version
+    - echidna setup-workflow --export-workflow workflow-test
+    - test -f workflow-test/Snakefile
+
+about:
+  home: https://github.com/l-gallucci/echidna
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: "Metagenomic assembly, MAG integrity and chimera screening"
+  description: >-
+    Python CLI orchestrating MAG quality assessment and assembly integrity
+    screening. External bioinformatics tools and databases are installed in
+    separate environments; this package supplies the echidna command.
+  dev_url: https://github.com/l-gallucci/echidna
+  doc_url: https://github.com/l-gallucci/echidna/blob/main/wiki/Home.md
+
+extra:
+  recipe-maintainers:
+    - l-gallucci

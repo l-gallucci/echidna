@@ -1,168 +1,46 @@
-# Installation Guide
+# Installation
 
-## Quick Install
+The Python core requires Python >=3.8 and no third-party runtime libraries.
+External bioinformatics tools and their databases are separate dependencies;
+choose an interpreter supported by each tool's environment.
 
 ```bash
-# Clone repository
 git clone https://github.com/l-gallucci/echidna.git
 cd echidna
-
-# Install in development mode
-pip install -e .
-
-# Or install normally
-pip install .
-```
-
-## Verify Installation
-
-```bash
+python -m pip install -e .
 echidna --version
 echidna --help
 ```
 
-## Directory Structure
+See [the installation guide](docs/installation.md) for tool environments and
+reference databases, and [the wiki](wiki/Home.md) for workflow contracts.
 
-After cloning, your directory should look like:
+The distribution is `echidnaxomics`; the command and Python import are `echidna`.
+Until publication, install from this checkout. Do not install the unrelated
+`echidna` distribution from a registry.
 
-```
-echidna/
-├── echidna/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── commands/
-│   │   ├── __init__.py
-│   │   ├── filter_misassemblies.py
-│   │   ├── remove_hq_contigs.py
-│   │   ├── filter_checkm2.py
-│   │   └── run_gtdbtk.py
-│   └── utils/
-│       ├── __init__.py
-│       ├── fasta.py
-│       ├── logging.py
-│       └── validation.py
-├── setup.py
-├── README.md
-├── LICENSE
-└── INSTALL.md
-```
-
-## Dependencies
-
-### Core (required)
-- Python >= 3.7
-
-### External Tools (optional, depending on commands used)
-
-#### For `filter-misassemblies`:
-```bash
-# Install anvi'o
-conda create -n anvio-8 -c conda-forge -c bioconda anvio=8
-```
-
-#### For `filter-checkm2`:
-```bash
-# Install CheckM2
-conda create -n checkm2 -c conda-forge -c bioconda checkm2
-```
-
-#### For `run-gtdbtk`:
-```bash
-# Install GTDB-Tk
-conda create -n gtdbtk-2 -c conda-forge -c bioconda gtdbtk=2.3.2
-
-# Download GTDB-Tk database
-wget https://data.gtdb.ecogenomic.org/releases/latest/auxillary_files/gtdbtk_data.tar.gz
-tar -xzf gtdbtk_data.tar.gz
-export GTDBTK_DATA_PATH=/path/to/gtdbtk_data
-```
-
-## Development Installation
-
-If you want to contribute to Echidna:
+Wheels include Snakemake templates. Export a writable copy after installation:
 
 ```bash
-# Clone repository
-git clone https://github.com/l-gallucci/echidna.git
-cd echidna
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install in editable mode with development dependencies
-pip install -e ".[dev]"
-
-# Run tests (when available)
-pytest
+echidna setup-workflow --export-workflow ./my-workflow
 ```
 
-## Troubleshooting
+Use a new destination; export never overwrites an existing directory. With a
+checkout, the existing `--repo /absolute/path/to/echidna` mode still works and
+points the tool environments at that editable checkout. Configure exported
+`config.yaml`, then run Snakemake with its absolute `-s` and `--configfile` paths.
+Input/output paths remain relative to the directory where Snakemake is launched.
+Pass `fetch-databases --config /absolute/path/to/my-workflow/config.yaml` when
+registering databases for an exported workflow.
+See [release preparation](docs/releasing.md) for author metadata and Bioconda.
 
-### Command not found after installation
-
-If `echidna` is not found after installation:
+For development, use an environment with pytest:
 
 ```bash
-# Check if it's in your PATH
-which echidna
-
-# If not, find where pip installed it
-pip show echidna
-
-# Add to PATH or use full path
-export PATH="$PATH:/path/to/echidna/bin"
+python -m pip install -e ".[dev]"
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider
 ```
 
-### Permission denied
-
-If you get permission errors:
-
-```bash
-# Install for user only
-pip install --user .
-
-# Or use sudo (not recommended)
-sudo pip install .
-```
-
-### Python version issues
-
-Check your Python version:
-
-```bash
-python --version  # Should be >= 3.7
-
-# If you have multiple Python versions
-python3.9 -m pip install .
-```
-
-## Uninstallation
-
-```bash
-pip uninstall echidna
-```
-
-## Platform-Specific Notes
-
-### Linux
-No special requirements.
-
-### macOS
-Works out of the box. If using conda, prefer:
-```bash
-conda install -c conda-forge python=3.9
-```
-
-### Windows
-Echidna should work on Windows, but external tools (anvi'o, CheckM2, GTDB-Tk) are best run in WSL2 or Docker.
-
-## Docker (Coming Soon)
-
-```bash
-# Build Docker image
-docker build -t echidna:latest .
-
-# Run
-docker run -v $(pwd):/data echidna filter-misassemblies --help
-```
+Python core portability does not guarantee availability of every external tool
+on macOS or Windows. Follow upstream requirements; use Linux/WSL or suitable
+containers where needed. The project currently ships no Dockerfile.

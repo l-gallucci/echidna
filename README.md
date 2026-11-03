@@ -11,6 +11,11 @@ Echidna itself is pure Python (no dependencies) and installs in seconds. It
 orchestrates standard tools (anvi'o, CheckM2, GTDB-Tk, GUNC, barrnap,
 tRNAscan-SE, Kraken2, samtools, BLAST+), each in its own conda env.
 
+The distribution name is **`echidnaxomics`**. The command and Python import remain
+**`echidna`**. Install from the checkout below until a release is published;
+`pip install echidna` installs an unrelated project. See the
+[release preparation guide](docs/releasing.md) for DOI and Bioconda steps.
+
 ## Quickstart
 
 ```bash
@@ -74,6 +79,39 @@ Setup and environment helpers:
 | `check-envs` | Report tool versions per conda env + Echidna compatibility |
 
 Every subcommand has `-h/--help`.
+
+## Interpreting results and reproducibility
+
+Echidna has two branches: assembly cleaning (documented for PacBio HiFi reads
+mapped back to their own assembly) and MAG QC after external binning. After
+splitting contigs, remap reads to the modified assembly before computing depth
+for a new binning run.
+
+Quality tiers are intentional project defaults: HQ >=90% completeness / <=5%
+contamination, MQ >=70% / <=10%, LQ >=50% / <=10%. `process-large-contigs` uses
+its own 50%/10% extraction threshold. These labels are not strict MIMAG tiers.
+When the optional RNA gate is requested, missing RNA results demote HQ to MQ.
+
+Chimera screening is report-only: `Chimeric` and `Check` MAGs are not automatically
+excluded from the organized quality folders. `Clean` means no anomaly in the
+available measured signals, not proof that every signal was evaluated. GC,
+CheckM2 contamination and GTDB-Tk warnings are informative columns. Prefer
+GUNC/MMseqs2 references from the same taxonomy and release, in each tool's own
+format. Read-level comparisons can use a common `--taxonomy-rank` with the
+classifier's `--nodes-dmp`.
+
+Use fresh output directories when changing inputs or thresholds: populated
+`Selected/` folders are refused to prevent stale tier assignments. `--from` and
+`--skip` assume prior outputs already exist and match the current run. Assembly
+HQ removal and `--hq-list` use exact FASTA contig IDs, not numbers in bin names.
+`final-report --organized-quality <merged_quality.tsv>` adds the effective
+`organized_tier` alongside the historical CheckM2 `tier`; `--genomes-dir` adds
+explicit circular annotations and a separate near-complete candidate flag.
+
+See the [wiki source](wiki/Home.md), [wiki activation guide](docs/wiki.md), and
+[revalidated fixes](docs/audit-2026-11-03/FIXES.md). Tests cover parser contracts,
+negative controls and simulated process failures. A full biological end-to-end
+run against installed external databases is still required for your environment.
 
 ## Documentation
 

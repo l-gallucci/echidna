@@ -26,7 +26,8 @@ join signal described in the same work.
 
 ## Quality tiers (MIMAG)
 
-HQ/MQ/LQ tiers in `organize-mags` follow the MIMAG standard. Full HQ additionally
+HQ/MQ/LQ in `organize-mags` are internal inclusive thresholds inspired by MIMAG,
+with the medium band split at 70%; they are not strict MIMAG tiers. The optional RNA gate additionally
 requires 5S/16S/23S rRNA and tRNAs for at least 18 amino acids, which
 `run-mimag-rna` evaluates (CheckM2 does not).
 

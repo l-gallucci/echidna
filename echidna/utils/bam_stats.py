@@ -1,25 +1,16 @@
-"""
-BAM-level statistics for clipping position classification.
+"""BAM evidence for clipping classification.
 
-Alignment categories used
--------------------------
-Primary only (FLAG & 0x900 == 0)
-    Used for: discordant-pair fraction, insert-size distribution, strand ratio.
-    Pair-level fields (TLEN, RNEXT, proper-pair flag 0x2) are only reliable here.
-
-Primary + secondary (FLAG & 0x800 == 0, supplementary excluded)
-    Used for: local read depth around clipping positions.
-    Including secondary (multi-mappers) inflates coverage at repeat-collapsed
-    loci — which is precisely the signal we want to detect.
-
-Supplementary (FLAG 0x800) are excluded throughout.
-    They require SA-tag parsing, are absent from many metagenomic BAMs, and
-    add complexity that is better handled by dedicated SV callers.
-
-All parsing is done via ``samtools view`` subprocess — no pysam required.
+Local and mean depth both count aligned bases from primary plus secondary
+alignments, excluding unmapped/supplementary (mask 2052). Local depth is the
+mean per-base depth of the clipped-position window. Pair statistics require
+paired primary records; unpaired HiFi reads have NA pair statistics. Primary
+SA tags provide inter-contig join evidence without counting supplementary
+records twice. BAM starts are converted from 1-based SAM to zero-based positions.
 """
 
+import re
 import math
+import tempfile
 import subprocess
 import bisect
 from pathlib import Path
@@ -50,17 +41,16 @@ def get_contig_mean_depths(bam_file: Path, min_mapq: int = 20) -> Dict[str, floa
     """
     Run ``samtools coverage`` and return {contig: mean_depth}.
 
-    samtools coverage already excludes supplementary alignments internally
-    (it counts only primary alignments by default).
+    The explicit --ff mask matches collect_position_stats; default samtools
+    flags would exclude secondary records but not supplementary ones.
     We pass --min-MQ to apply the same MAPQ filter used in the rest of the
     pipeline so all coverage estimates are on a consistent base.
     """
-    cmd = ['samtools', 'coverage', '--min-MQ', str(min_mapq), str(bam_file)]
+    cmd = ['samtools', 'coverage', '--min-MQ', str(min_mapq), '--ff', '2052', '-d', '0', str(bam_file)]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError as e:
-        log_error(f"samtools coverage failed: {e.stderr[:300]}")
-        return {}
+        raise RuntimeError(f"samtools coverage failed: {(e.stderr or chr(32))[:300]}") from e
 
     depths: Dict[str, float] = {}
     for line in result.stdout.splitlines():
@@ -145,6 +135,7 @@ class _PosAccumulator:
         # primary only
         'n_primary',
         'n_proper_pair',
+        'n_paired',
         'n_discordant',
         'n_large_insert',
         'n_forward',
@@ -163,6 +154,7 @@ class _PosAccumulator:
         self.n_depth = 0
         self.n_primary = 0
         self.n_proper_pair = 0
+        self.n_paired = 0
         self.n_discordant = 0
         self.n_large_insert = 0
         self.n_forward = 0
@@ -174,12 +166,12 @@ class _PosAccumulator:
 
     def add_read(self, flag: int, tlen: int, seq: str, cigar: str,
                  read_pos: int, insert_mean: float, insert_std: float,
-                 sa_partners: Optional[List[str]] = None):
+                 sa_partners: Optional[List[str]] = None, depth_contribution: float = 1.0):
         is_secondary = bool(flag & 0x100)
         is_primary = not is_secondary          # (supplementary already excluded upstream)
 
         # All non-supplementary reads count toward depth
-        self.n_depth += 1
+        self.n_depth += depth_contribution
 
         if not is_primary:
             return
@@ -187,10 +179,12 @@ class _PosAccumulator:
         self.n_primary += 1
 
         # Proper pair
-        if flag & 0x2:
-            self.n_proper_pair += 1
-        else:
-            self.n_discordant += 1
+        if flag & 0x1:
+            self.n_paired += 1
+            if flag & 0x2:
+                self.n_proper_pair += 1
+            else:
+                self.n_discordant += 1
 
         # Large insert (only for proper pairs to avoid noise)
         if (flag & 0x2) and insert_mean > 0 and abs(tlen) > insert_mean + 3 * insert_std:
@@ -255,13 +249,10 @@ class _PosAccumulator:
                 contig_mean_depth: float) -> Dict:
         depth_ratio = (self.n_depth / contig_mean_depth
                        if contig_mean_depth > 0 else float('nan'))
-        clip_frac = float('nan')
-        if self.n_depth > 0:
-            clip_frac = self.n_depth / self.n_depth   # placeholder — real clip frac below
-        disc_frac = (self.n_discordant / self.n_primary
-                     if self.n_primary > 0 else float('nan'))
-        large_ins_frac = (self.n_large_insert / self.n_primary
-                          if self.n_primary > 0 else float('nan'))
+        disc_frac = (self.n_discordant / self.n_paired
+                     if self.n_paired > 0 else float('nan'))
+        large_ins_frac = (self.n_large_insert / self.n_paired
+                          if self.n_paired > 0 and self.n_proper_pair > 0 else float('nan'))
         strand_bias = float('nan')
         if self.n_forward + self.n_reverse > 0:
             strand_bias = self.n_forward / (self.n_forward + self.n_reverse)
@@ -333,111 +324,68 @@ def _extract_clipped_bases(cigar: str, seq: str,
 
 
 def collect_position_stats(
-    bam_file: Path,
-    clipping_data: Dict[str, List],   # contig → [(pos, coverage), ...]
-    window: int,
-    min_mapq: int,
-    contig_mean_depths: Dict[str, float],
-    contig_lengths: Dict[str, int],
-    insert_mean: float,
-    insert_std: float,
+    bam_file: Path, clipping_data: Dict[str, List], window: int, min_mapq: int,
+    contig_mean_depths: Dict[str, float], contig_lengths: Dict[str, int],
+    insert_mean: float, insert_std: float,
 ) -> Dict[Tuple[str, int], Dict]:
+    """Mean aligned-base depth in each clipped position's local window.
+
+    CIGAR reference coordinates are zero-based. M, = and X contribute bases;
+    insertions, deletions and skipped reference bases do not. Primary plus
+    secondary depth matches samtools coverage --ff 2052. Pair evidence uses
+    paired primary records only. Long reads starting outside the window count.
     """
-    Single streaming pass through the BAM.
-    Returns {(contig, pos): stats_dict} for every clipping position.
-
-    Uses primary + secondary alignments for depth (supplementary excluded via -F 2048).
-    Pair statistics (discordant, insert size) use primary only (checked per-read via FLAG).
-    """
-    if not clipping_data:
-        return {}
-
-    # Build fast lookup: contig → sorted list of clip positions
-    pos_index: Dict[str, List[int]] = {
-        contig: sorted(r[0] for r in records)
-        for contig, records in clipping_data.items()
-    }
-    # Accumulators: (contig, clip_pos) → _PosAccumulator
-    accumulators: Dict[Tuple[str, int], _PosAccumulator] = {}
-    for contig, records in clipping_data.items():
-        for pos, _ in records:
-            accumulators[(contig, pos)] = _PosAccumulator(pos, this_contig=contig)
-
-    # Stream BAM: exclude supplementary (-F 2048), apply MAPQ filter
-    cmd = ['samtools', 'view', '-F', '2048', '-q', str(min_mapq), str(bam_file)]
-    log_info("Streaming BAM for per-position stats…")
-    n_reads = 0
-
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True, bufsize=1)
-        for line in proc.stdout:
-            if line.startswith('@'):
-                continue
-            fields = line.split('\t')
-            if len(fields) < 10:
-                continue
-
-            flag = int(fields[1])
-            contig = fields[2]
-            if contig == '*' or contig not in pos_index:
-                continue
-
-            try:
-                read_pos = int(fields[3])
-            except ValueError:
-                continue
-
-            seq = fields[9]
-            cigar = fields[5]
-            try:
-                tlen = int(fields[8])
-            except ValueError:
-                tlen = 0
-
-            # Supplementary-alignment targets from the SA:Z: optional tag.
-            # Format: SA:Z:rname,pos,strand,CIGAR,mapQ,NM;rname,...  → take each rname.
-            sa_partners: Optional[List[str]] = None
-            for opt in fields[11:]:
-                if opt.startswith('SA:Z:'):
-                    sa_partners = [
-                        entry.split(',', 1)[0]
-                        for entry in opt[5:].rstrip('\n').split(';')
-                        if entry
-                    ]
-                    break
-
-            # Find clipping positions within window of this read's start
-            positions = pos_index[contig]
-            lo = bisect.bisect_left(positions, read_pos - window)
-            hi = bisect.bisect_right(positions, read_pos + window)
-
-            for clip_pos in positions[lo:hi]:
-                key = (contig, clip_pos)
-                if key in accumulators:
-                    accumulators[key].add_read(
-                        flag, tlen, seq, cigar,
-                        read_pos, insert_mean, insert_std,
-                        sa_partners=sa_partners,
-                    )
-
-            n_reads += 1
-            if n_reads % 1_000_000 == 0:
-                log_info(f"  Processed {n_reads:,} reads…")
-
-        proc.stdout.close()
-        proc.wait()
-    except Exception as e:
-        log_error(f"BAM streaming failed: {e}")
-        return {}
-
-    log_info(f"BAM stream complete: {n_reads:,} reads processed")
-
-    # Build output dicts
-    results: Dict[Tuple[str, int], Dict] = {}
-    for (contig, clip_pos), acc in accumulators.items():
-        mean_depth = contig_mean_depths.get(contig, 0.0)
-        contig_len = contig_lengths.get(contig, 0)
-        results[(contig, clip_pos)] = acc.to_dict(contig, contig_len, mean_depth)
-
-    return results
+    if window < 0:
+        raise ValueError('window must be non-negative')
+    positions = {c: sorted({r[0] for r in rs}) for c, rs in clipping_data.items()}
+    accs = {(c, p): _PosAccumulator(p, c) for c, ps in positions.items() for p in ps}
+    cmd = ['samtools', 'view', '-F', '2052', '-q', str(min_mapq), str(bam_file)]
+    with tempfile.TemporaryFile(mode='w+t') as errors:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errors, text=True)
+        try:
+            for line in proc.stdout:
+                fields = line.rstrip('\n').split('\t')
+                if len(fields) < 11 or fields[2] not in positions:
+                    continue
+                flag, contig = int(fields[1]), fields[2]
+                if flag & 2052:
+                    continue
+                start = int(fields[3]) - 1
+                cursor = start
+                blocks = []
+                for n, op in re.findall(r'(\d+)([MIDNSHP=X])', fields[5]):
+                    n = int(n)
+                    if op in 'M=X':
+                        blocks.append((cursor, cursor + n))
+                        cursor += n
+                    elif op in 'DN':
+                        cursor += n
+                if not blocks:
+                    continue
+                ps = positions[contig]
+                lo = bisect.bisect_left(ps, start - window)
+                hi = bisect.bisect_right(ps, cursor + window)
+                partners = None
+                for opt in fields[11:]:
+                    if opt.startswith('SA:Z:'):
+                        partners = [entry.split(',', 1)[0] for entry in opt[5:].split(';') if entry]
+                        break
+                for pos in ps[lo:hi]:
+                    length = contig_lengths.get(contig, 0)
+                    left, right = max(0, pos - window), pos + window + 1
+                    if length:
+                        right = min(right, length)
+                    overlap = sum(max(0, min(b, right) - max(a, left)) for a, b in blocks)
+                    if overlap and right > left:
+                        accs[(contig, pos)].add_read(
+                            flag, int(fields[8]), fields[9], fields[5], start,
+                            insert_mean, insert_std, partners,
+                            depth_contribution=overlap / (right - left))
+        finally:
+            proc.stdout.close()
+            proc.wait()
+        if proc.returncode:
+            errors.seek(0)
+            raise RuntimeError(f'samtools view failed (exit {proc.returncode}): {errors.read(300)}')
+    return {(c, p): a.to_dict(c, contig_lengths.get(c, 0), contig_mean_depths.get(c, 0))
+            for (c, p), a in accs.items()}

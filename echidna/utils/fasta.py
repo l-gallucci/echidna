@@ -55,7 +55,7 @@ def extract_contig_id(text: str) -> str:
     return m.group(1) if m else text.strip()
 
 
-def read_fasta_streaming(fasta_path: Path) -> Iterator[Tuple[str, str]]:
+def read_fasta_streaming(fasta_path: Path, full_header: bool = False) -> Iterator[Tuple[str, str]]:
     """
     Generator yielding (name, sequence) tuples one record at a time.
     Handles both plain and gzipped FASTA files.
@@ -70,7 +70,10 @@ def read_fasta_streaming(fasta_path: Path) -> Iterator[Tuple[str, str]]:
             if line.startswith('>'):
                 if current_name:
                     yield current_name, ''.join(current_seq)
-                current_name = line[1:].split()[0]
+                header = line[1:].strip()
+                if not header:
+                    raise ValueError(f'Empty FASTA header in {fasta_path}')
+                current_name = header if full_header else header.split()[0]
                 current_seq = []
             else:
                 current_seq.append(line)
@@ -133,3 +136,11 @@ def filter_by_length(input_fasta: Path, output_fasta: Path,
     ]
     write_fasta(kept, output_fasta)
     return len(kept)
+
+
+def circular_annotation(header: str):
+    """Explicit assembler annotation: True/False, or None when not supplied."""
+    match = re.search(r'\bcircular[=:]\s*(true|yes|y|1|false|no|n|0)\b', header, re.I)
+    if match:
+        return match.group(1).lower() in ('true', 'yes', 'y', '1')
+    return None

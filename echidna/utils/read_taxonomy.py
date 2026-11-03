@@ -241,7 +241,7 @@ def stream_bam(
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=None,
         text=True,
         bufsize=1,
     )
@@ -261,13 +261,13 @@ def stream_bam(
                 pos = int(fields[3])
             except ValueError:
                 continue
-            yield read_id, contig, pos
+            yield read_id, contig, pos - 1
     finally:
         proc.stdout.close()
         proc.wait()
         if proc.returncode not in (0, None, -13):   # -13 = SIGPIPE (early close)
-            stderr = proc.stderr.read()
-            log_warning(f"samtools exited with code {proc.returncode}: {stderr[:200]}")
+            stderr = "see samtools stderr above"
+            raise RuntimeError(f"samtools exited with code {proc.returncode}: {stderr[:200]}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -308,17 +308,16 @@ def compute_taxonomy_stats(
       dominant_taxid, dominant_name, dominant_fraction,
       shannon_diversity
     """
-    counts = dict(taxid_counts)
-    n_total = sum(counts.values())
-    n_unclassified = counts.get(0, 0)
-    n_classified = n_total - n_unclassified
+    counts = {k: v for k, v in taxid_counts.items() if k >= 0}
+    n_total = sum(taxid_counts.values())
+    n_classified = sum(v for k, v in counts.items() if k > 0)
 
     # For diversity, optionally exclude unclassified
-    analysis_counts = {k: v for k, v in counts.items() if k != 0} \
+    analysis_counts = {k: v for k, v in counts.items() if k > 0} \
         if exclude_unclassified else counts
 
     n_analysis = sum(analysis_counts.values())
-    n_taxa = len([k for k in analysis_counts if k != 0])
+    n_taxa = len([k for k in analysis_counts if k > 0])
 
     dominant_taxid = 0
     dominant_fraction = 0.0
@@ -367,6 +366,8 @@ def windowed_taxon_profile(
         start, end, n_reads, dominant_taxid, dominant_name,
         dominant_fraction, n_taxa, is_shift (dominant taxon changed vs prev window)
     """
+    if window <= 0 or step <= 0:
+        raise ValueError('Window and step must be positive')
     if not positions or contig_length == 0:
         return []
 
@@ -376,12 +377,12 @@ def windowed_taxon_profile(
     for start in range(0, max(contig_length - window + 1, 1), step):
         end = min(start + window, contig_length)
 
-        window_reads = [taxid for pos, taxid in positions if start <= pos < end]
+        window_reads = [taxid for pos, taxid in positions if start <= pos < end and taxid > 0]
         if len(window_reads) < min_reads_per_window:
             continue
 
         counter = Counter(window_reads)
-        analysis = Counter({k: v for k, v in counter.items() if k != 0})
+        analysis = Counter({k: v for k, v in counter.items() if k > 0})
         n_analysis = sum(analysis.values())
 
         if n_analysis == 0:
@@ -389,7 +390,7 @@ def windowed_taxon_profile(
 
         dom_taxid = max(analysis, key=analysis.get)
         dom_fraction = analysis[dom_taxid] / n_analysis
-        n_taxa = len([k for k in analysis if k != 0])
+        n_taxa = len([k for k in analysis if k > 0])
 
         is_shift = (prev_dominant is not None) and (dom_taxid != prev_dominant)
         prev_dominant = dom_taxid
@@ -442,8 +443,8 @@ def assess_read_chimera_risk(
     Risk levels: High ≥ 5 | Medium ≥ 2 | Low ≥ 1 | Clean 0
     Minimum 10 reads required; below that → 'Insufficient'
     """
-    if n_reads < 10:
-        return 'Insufficient', [f"Too few reads ({n_reads}) for reliable classification"]
+    if n_reads < 10 or classified_fraction * n_reads < 10 or n_taxa == 0:
+        return 'Insufficient', [f"Insufficient classified evidence ({n_reads} mapped reads)"]
 
     reasons: List[str] = []
     score = 0

@@ -15,24 +15,12 @@ from ..utils.logging import log_info, log_error, log_warning, print_header, prin
 
 
 def load_hq_ids_from_dir(hq_dir: Path) -> Set[str]:
-    """
-    Extract contig IDs from all files in an HQ genome directory.
-    Numeric IDs are parsed from filenames via extract_contig_id().
-    """
-    hq_ids = set()
-    count = 0
-
-    log_info(f"Scanning HQ directory: {hq_dir}")
-
-    for filepath in hq_dir.rglob('*'):
-        if filepath.is_file() and not filepath.name.startswith('.'):
-            file_id = extract_contig_id(filepath.stem)
-            if file_id:
-                hq_ids.add(file_id)
-                count += 1
-
-    log_info(f"Found {len(hq_ids):,} unique HQ genome IDs from {count:,} files")
-    return hq_ids
+    """Read exact contig IDs from MAG FASTAs, never infer them from bin filenames."""
+    ids = set()
+    for path in sorted(hq_dir.rglob('*')):
+        if path.is_file() and path.name.endswith(('.fa', '.fna', '.fasta', '.fa.gz', '.fna.gz', '.fasta.gz')):
+            ids.update(name for name, _ in read_fasta_streaming(path))
+    return ids
 
 
 def load_hq_ids_from_list(list_file: Path) -> Set[str]:
@@ -45,7 +33,7 @@ def load_hq_ids_from_list(list_file: Path) -> Set[str]:
         for line in f:
             line = line.strip()
             if line and not line.startswith('#'):
-                contig_id = extract_contig_id(line)
+                contig_id = line
                 if contig_id:
                     hq_ids.add(contig_id)
 
@@ -81,7 +69,7 @@ def process_assembly(assembly: Path, hq_ids: Set[str], output: Path,
         contig_len = len(sequence)
         stats['total_bp'] += contig_len
 
-        contig_id = extract_contig_id(contig_name)
+        contig_id = contig_name
 
         if contig_id in hq_ids:
             stats['hq_removed'] += 1
@@ -99,7 +87,7 @@ def process_assembly(assembly: Path, hq_ids: Set[str], output: Path,
         if not dry_run:
             output_sequences.append((contig_name, sequence))
 
-    if not dry_run and output_sequences:
+    if not dry_run:
         log_info(f"\nWriting output to: {output}")
         write_fasta(output_sequences, output)
 

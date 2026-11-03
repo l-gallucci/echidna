@@ -1,0 +1,147 @@
+{
+  "repo": "/Users/lgallucc/Desktop/LocalBioinf/echidna",
+  "results": [
+    {
+      "id": "F01_hash_mismatch",
+      "confirmed": true,
+      "evidence": {
+        "contig": "contig_7",
+        "checkm2_name": "contig_7_93105b",
+        "has_clipping": true,
+        "observed": "EXTRACT_HQ; absent from filtering assembly"
+      }
+    },
+    {
+      "id": "F02_no_large_output",
+      "confirmed": true,
+      "evidence": "Exit normale senza assembly_for_filtering.fa necessario al passo successivo"
+    },
+    {
+      "id": "F03_missing_checkm2_contig",
+      "confirmed": true,
+      "evidence": "c2 non presente nel report CheckM2 scompare sia dall'assembly aggiornato sia da HQ_extracted"
+    },
+    {
+      "id": "F04_wrapper_missing_windows",
+      "confirmed": true,
+      "evidence": "readchim omette --assembly, non produce finestre, classify richiede quel file"
+    },
+    {
+      "id": "F05_window_column_mismatch",
+      "confirmed": true,
+      "evidence": "is_taxon_shift=True scritto dal produttore; il lettore cerca is_shift e perde il segnale"
+    },
+    {
+      "id": "F06_long_read_overlap",
+      "confirmed": true,
+      "evidence": "Read 9000M100S in POS=1000 termina e clippa in 10000, ma non viene conteggiata a 10000"
+    },
+    {
+      "id": "F07_unpaired_discordance",
+      "confirmed": true,
+      "evidence": {
+        "unpaired_reads": 10,
+        "discordant_fraction": 1,
+        "label": "chimera_candidate"
+      }
+    },
+    {
+      "id": "F08_blast_failure_as_no_hits",
+      "confirmed": true,
+      "evidence": {
+        "mock_blast_exit": 2,
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "F09_missing_rna_keeps_HQ",
+      "confirmed": true,
+      "evidence": [
+        {
+          "name": "x",
+          "tier": "HQ",
+          "mimag_rna_ok": "",
+          "hq_rna_demoted": ""
+        }
+      ]
+    },
+    {
+      "id": "F10_stale_tier_files",
+      "confirmed": true,
+      "evidence": "x.fa rimane in HQ dopo una nuova selezione MQ nella stessa directory"
+    },
+    {
+      "id": "F11_unresolved_as_clean",
+      "confirmed": true,
+      "evidence": {
+        "n_contigs_resolved": 0,
+        "foreign_frac": 0,
+        "verdict": "Clean"
+      }
+    },
+    {
+      "id": "F12_missing_read_as_classified",
+      "confirmed": true,
+      "evidence": {
+        "n_reads_total": 100,
+        "n_classified": 100,
+        "classified_fraction": 1.0,
+        "n_taxa": 1,
+        "dominant_taxid": -1,
+        "dominant_name": "taxid:-1",
+        "dominant_fraction": 1.0,
+        "shannon_diversity": 0.0
+      }
+    },
+    {
+      "id": "F13_remove_wrong_contig",
+      "confirmed": true,
+      "evidence": "HQ bin.42.fa contiene contig_7 e contig_9; viene rimosso contig_42 estraneo al MAG"
+    },
+    {
+      "id": "F14_final_tier_mismatch",
+      "confirmed": true,
+      "evidence": {
+        "organize_tier": "MQ",
+        "final_report_tier": "HQ"
+      }
+    },
+    {
+      "id": "F15_yaml_regex",
+      "confirmed": true,
+      "evidence": "bad escape \\d at position 18"
+    },
+    {
+      "id": "F16_extension_not_forwarded",
+      "confirmed": true,
+      "evidence": "--genome-ext fna non inoltrato a MIMAG: il comando successivo cerca *.fa"
+    },
+    {
+      "id": "D01_verdict_report_only",
+      "confirmed": true,
+      "evidence": "organize2 non riceve il report chimera; selezione finale basata su CheckM2 e RNA"
+    },
+    {
+      "id": "F17_verdict_schema",
+      "confirmed": true,
+      "evidence": "filter-misassemblies accetta il report di check-chimeras ma legge solo chimera_risk"
+    },
+    {
+      "id": "F18_zero_clipping_events",
+      "confirmed": true,
+      "evidence": "File clipping valido senza eventi: filter-misassemblies termina con exit 1"
+    },
+    {
+      "id": "F19_anvio_clipping_schema",
+      "confirmed": true,
+      "evidence": "120 reads clipped nello schema anvi'o 9 diventano coverage=1; soglia 50 rimuove l'evento"
+    },
+    {
+      "id": "F20_anvio_zero_cov_schema",
+      "confirmed": true,
+      "evidence": "Intervallo zero-cov ufficiale 100500-101000 scartato perch\u00e9 il parser attende due interi"
+    }
+  ],
+  "confirmed": 21,
+  "total": 21
+}

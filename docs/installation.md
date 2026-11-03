@@ -138,8 +138,8 @@ The path KIND is checked per tool: GTDB-Tk = a directory, GUNC and CheckM2 = a
 ```bash
 # already have them? just point Echidna at them (validated, written to config)
 echidna fetch-databases \
-    --gtdbtk-data /data/gtdbtk_r220 \                      # DIRECTORY
-    --gunc-db     /data/gunc/gunc_db_progenomes2.1.dmnd \  # FILE
+    --gtdbtk-data /data/gtdbtk_r220 \
+    --gunc-db     /data/gunc/gunc_db_progenomes2.1.dmnd \
     --checkm2-db  /data/checkm2/uniref100.KO.1.dmnd        # FILE
 
 # or download the missing ones (each runs inside its tool's env)
@@ -157,10 +157,25 @@ echidna fetch-databases --download --tools gunc --gunc-db-source gtdb_214
 
 ```bash
 pip install -e ".[dev]"   # installs pytest
-pytest                    # 96 unit tests, no external tools needed
+pytest                    # unit/integration contract tests; external tools are simulated
 ```
 
 The suite covers the dependency-free logic: contig-id parsing, CheckM2 tiering,
 GC/GUNC chimera scoring, the SA-tag join detector, clipping classification,
 organize-mags renaming, MIMAG rRNA/tRNA parsing, per-tool database-path
 validation, and the config/env helpers.
+
+
+## Distribution naming
+
+The installable distribution is **echidnaxomics**, while the executable and
+Python import remain **echidna**. Install from the checkout until a release
+is published. The registry package named `echidna` is unrelated. Installed
+wheels include templates exportable with `echidna setup-workflow
+--export-workflow ./my-workflow`. See [release preparation](releasing.md) for
+CFF author metadata, DOI archiving, package validation and the Bioconda draft.
+
+The dependency-free statement applies to Echidna's Python core only. Heavy
+subprocess tools have their own Python/native dependencies: for example GUNC's
+pandas/numpy stack is pinned in its env template. They are not optional imports
+inside Echidna and are not all installed by its base Python/conda package.

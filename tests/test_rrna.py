@@ -122,9 +122,9 @@ def test_gate_demotes_failing_hq():
     assert counts['MQ'] == 2
 
 
-def test_gate_missing_record_keeps_hq():
+def test_gate_missing_record_demotes_unassessed_hq():
     records = [{'name': 'X', 'tier': 'HQ', 'completeness': 99, 'contamination': 0}]
     counts = apply_mimag_rna_gate(records, {})  # no record for X
-    assert records[0]['tier'] == 'HQ'
+    assert records[0]['tier'] == 'MQ'
     assert records[0]['mimag_rna_ok'] == ''
-    assert counts['HQ'] == 1
+    assert counts['MQ'] == 1

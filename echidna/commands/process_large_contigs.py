@@ -4,6 +4,7 @@ Echidna - process-large-contigs command
 Extract and QC large contigs, then intelligently filter based on quality and misassemblies
 """
 
+import csv
 import re
 import sys
 import argparse
@@ -42,7 +43,7 @@ def extract_large_contigs(assembly: Path, max_length: int, output_dir: Path) -> 
     large_contigs = []
     regular_contigs = []
 
-    for name, seq in read_fasta_streaming(assembly):
+    for name, seq in read_fasta_streaming(assembly, full_header=True):
         if len(seq) > max_length:
             large_contigs.append((name, seq))
         else:
@@ -73,8 +74,8 @@ def split_large_contigs_individually(large_contigs_file: Path, output_dir: Path)
     output_dir.mkdir(parents=True, exist_ok=True)
     count = 0
 
-    for name, seq in read_fasta_streaming(large_contigs_file):
-        out_file = output_dir / f"{safe_filename(name)}.fa"
+    for name, seq in read_fasta_streaming(large_contigs_file, full_header=True):
+        out_file = output_dir / f"{safe_filename(name.split()[0])}.fa"
         write_fasta([(name, seq)], out_file)
         count += 1
 
@@ -235,7 +236,7 @@ def extract_hq_genomes(large_contigs_individual_dir: Path, hq_list: List[str],
 def create_updated_assembly(regular_assembly: Path, large_contigs_individual_dir: Path,
                             contigs_to_keep: List[str], output_file: Path):
     """Create updated assembly: all regular contigs + selected large contigs."""
-    sequences = list(read_fasta_streaming(regular_assembly))
+    sequences = list(read_fasta_streaming(regular_assembly, full_header=True))
     log_info(f"Added {len(sequences):,} regular contigs")
 
     added = 0
@@ -244,7 +245,7 @@ def create_updated_assembly(regular_assembly: Path, large_contigs_individual_dir
         # do not re-apply safe_filename (would double-hash and miss the file).
         contig_file = large_contigs_individual_dir / f"{contig_name}.fa"
         if contig_file.exists():
-            for name, seq in read_fasta_streaming(contig_file):
+            for name, seq in read_fasta_streaming(contig_file, full_header=True):
                 sequences.append((name, seq))
                 added += 1
         else:
@@ -315,6 +316,11 @@ def run(args):
 
     validate_file_exists(args.assembly, "Assembly file")
     validate_dir_exists(args.misassemblies, "Misassemblies directory")
+    if (args.output_dir / 'assembly_for_filtering.fa').exists():
+        raise ValueError('Output already contains a processed assembly; use a fresh output directory')
+    hq_existing = args.output_dir / 'HQ_extracted'
+    if hq_existing.exists() and any(hq_existing.iterdir()):
+        raise ValueError('HQ_extracted is not empty; use a fresh output directory')
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     print_header("Echidna - Process Large Contigs")
@@ -328,6 +334,8 @@ def run(args):
 
     if n_large == 0:
         log_warning("No large contigs found — nothing to process")
+        shutil.copy2(extract_dir / "assembly_regular.fa", args.output_dir / "assembly_for_filtering.fa")
+        (args.output_dir / "HQ_extracted").mkdir(exist_ok=True)
         log_info("Assembly can be used as-is for binning")
         return
 
@@ -367,11 +375,24 @@ def run(args):
         sys.exit(1)
 
     quality_data = {rec['name']: rec for rec in raw_records}
+    if len(quality_data) != len(raw_records):
+        raise ValueError('Duplicate CheckM2 genome names')
+    name_map = {safe_filename(name): name for name, _ in read_fasta_streaming(large_contigs_file)}
+    if set(quality_data) - set(name_map):
+        raise ValueError('CheckM2 results do not match this assembly; use matching results')
+    for stem in set(name_map) - set(quality_data):
+        log_warning(f'No CheckM2 result for {name_map[stem]}; retaining as unassessed')
+        quality_data[stem] = {'name': stem, 'completeness': float('nan'), 'contamination': float('nan')}
+    with open(args.output_dir / 'contig_name_map.tsv', 'w', newline='') as f:
+        writer = csv.writer(f, delimiter='\t')
+        writer.writerow(['checkm2_name', 'contig'])
+        writer.writerows(sorted(name_map.items()))
     log_info(f"Parsed quality data for {len(quality_data):,} contigs")
 
     # Step 5: Parse misassembly data
     print_section("STEP 5: Loading Misassembly Data")
-    misasm_contigs = get_contigs_with_misassemblies(args.misassemblies)
+    original_misasm = get_contigs_with_misassemblies(args.misassemblies)
+    misasm_contigs = {stem for stem, name in name_map.items() if name in original_misasm}
 
     # Step 6: Make filtering decisions
     decisions = make_filtering_decisions(

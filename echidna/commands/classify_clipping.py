@@ -113,7 +113,7 @@ def load_taxonomy_shifts(
     with open(windows_tsv, newline='') as f:
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
-            if (row.get('is_shift', '0') or '0').strip() not in ('1', 'True', 'true'):
+            if (row.get('is_taxon_shift') or row.get('is_shift') or '0').strip() not in ('1', 'True', 'true'):
                 continue
             contig = (row.get('contig') or '').strip()
             try:
@@ -417,8 +417,11 @@ def run_classify_clipping(
     print_section("Loading clipping data")
     clipping_data = load_clipping_data(misassembly_dir, min_coverage=min_clip_coverage)
     if not clipping_data:
-        log_error("No clipping positions found — nothing to classify")
-        sys.exit(1)
+        log_info('No clipping positions; writing an empty report')
+        if not dry_run:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            write_report({}, {}, {}, output)
+        return
 
     n_positions = sum(len(v) for v in clipping_data.values())
     log_info(f"Loaded {n_positions:,} clipping positions across "

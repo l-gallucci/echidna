@@ -135,7 +135,8 @@ def _concerns(row: Dict) -> str:
 
 
 REPORT_FIELDS = [
-    'genome', 'completeness', 'contamination', 'tier', 'taxonomy',
+    'genome', 'completeness', 'contamination', 'tier', 'organized_tier',
+    'n_contigs', 'circular_annotated', 'near_complete_candidate', 'taxonomy',
     'rank_taxon', 'n_16S', 'rrna_complete', 'trna_complete', 'mimag_rna_ok',
     'chimera_verdict', 'contig_chimera', 'n_foreign_contigs',
     'ssu_agree', 'ssu_taxon', 'gunc_mmseqs_concordance', 'concerns',
@@ -160,6 +161,8 @@ def build_report(
     contig: Optional[Dict[str, Dict]] = None,
     ssu: Optional[Dict[str, Dict]] = None,
     gunc_pass: Optional[Dict[str, str]] = None,
+    organized_tiers: Optional[Dict[str, str]] = None,
+    structures: Optional[Dict[str, Dict]] = None,
 ) -> List[Dict]:
     """Join all provided per-genome maps (keyed by normalised name) into rows."""
     checkm2 = checkm2 or {}
@@ -169,6 +172,8 @@ def build_report(
     contig = contig or {}
     ssu = ssu or {}
     gunc_pass = gunc_pass or {}
+    organized_tiers = organized_tiers or {}
+    structures = structures or {}
 
     rows: List[Dict] = []
     for genome in sorted(universe):
@@ -189,6 +194,10 @@ def build_report(
             'completeness': comp,
             'contamination': contam,
             'tier': tier,
+            'organized_tier': organized_tiers.get(genome, 'NA'),
+            'n_contigs': structures.get(genome, {}).get('n_contigs', 'NA'),
+            'circular_annotated': structures.get(genome, {}).get('circular_annotated', 'NA'),
+            'near_complete_candidate': (comp >= 99 and contam <= 5) if tier != 'NA' else 'NA',
             'taxonomy': tx.get('classification', 'NA') or 'NA',
             'rank_taxon': tx.get('rank_taxon', 'NA') or 'NA',
             'n_16S': mi.get('n_16S', 'NA') if mi else 'NA',

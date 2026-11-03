@@ -17,6 +17,7 @@ Reference: Meren Lab long-read assembly benchmarking workflow
   https://merenlab.org/data/benchmarking-long-read-assemblers/
 """
 
+import csv
 import gzip
 import subprocess
 import tempfile
@@ -59,46 +60,32 @@ def check_meryl() -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def parse_zero_cov_files(zero_cov_dir: Path) -> List[ZeroCovRegion]:
-    """
-    Parse *-zero_cov.txt files produced by anvi-script-find-misassemblies.
-
-    Expected format (tab-separated, one header line):
-        contig_name  sample_name  start  end
-    Coordinates are 1-based; converted to 0-based half-open here.
-    """
-    regions: List[ZeroCovRegion] = []
+    """Native anvi'o range is zero-based half-open; legacy start/end is 1-based inclusive."""
     files = sorted(zero_cov_dir.glob('*-zero_cov.txt'))
-
     if not files:
-        log_warning(f"No *-zero_cov.txt files in {zero_cov_dir}")
-        return regions
-
-    for fpath in files:
-        log_info(f"  Reading: {fpath.name}")
-        with open(fpath) as f:
-            f.readline()  # header
-            for lineno, line in enumerate(f, start=2):
-                if not line.strip():
-                    continue
-                fields = line.strip().split('\t')
-                if len(fields) < 4:
-                    log_warning(
-                        f"Skipping line {lineno} in {fpath.name}: "
-                        f"expected ≥4 fields, got {len(fields)}"
-                    )
-                    continue
-                contig = fields[0]
+        raise ValueError(f'No *-zero_cov.txt files in {zero_cov_dir}')
+    regions = []
+    for path in files:
+        with open(path) as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            fields = set(reader.fieldnames or [])
+            native = {'contig', 'range'}.issubset(fields)
+            legacy = {'contig_name', 'start', 'end'}.issubset(fields)
+            if not (native or legacy):
+                raise ValueError(f'Unrecognised zero-coverage columns in {path}')
+            for lineno, row in enumerate(reader, 2):
                 try:
-                    start = int(fields[2]) - 1   # 1-based → 0-based
-                    end   = int(fields[3])        # end is already exclusive
-                except ValueError:
-                    log_warning(f"Bad coordinates on line {lineno} in {fpath.name}")
-                    continue
-                if end > start:
-                    regions.append((contig, start, end))
-
-    log_info(f"Parsed {len(regions):,} zero-coverage regions from {len(files)} file(s)")
-    return regions
+                    name = row['contig' if native else 'contig_name'].strip()
+                    if native:
+                        start, end = map(int, row['range'].split('-'))
+                    else:
+                        start, end = int(row['start']) - 1, int(row['end'])
+                    if not name or start < 0 or end <= start:
+                        raise ValueError('invalid interval')
+                except (ValueError, TypeError, AttributeError) as e:
+                    raise ValueError(f'Invalid zero-coverage row {lineno} in {path}: {e}') from e
+                regions.append((name, start, end))
+    return sorted(set(regions))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -114,15 +101,14 @@ def compute_zero_cov_from_bam(
     Stream ``samtools depth -a`` and collect runs of zero depth.
     Returns (contig, start_0based, end_exclusive) for every run >= min_length.
     """
-    cmd = ['samtools', 'depth', '-a', '-Q', str(min_mapq), str(bam_file)]
+    cmd = ['samtools', 'depth', '-aa', '-Q', str(min_mapq), str(bam_file)]
     regions: List[ZeroCovRegion] = []
 
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, text=True)
     except Exception as e:
-        log_error(f"samtools depth failed: {e}")
-        return regions
+        raise RuntimeError(f"samtools depth failed: {e}") from e
 
     cur_contig: Optional[str] = None
     run_start: Optional[int] = None
@@ -165,6 +151,8 @@ def compute_zero_cov_from_bam(
 
     proc.stdout.close()
     proc.wait()
+    if proc.returncode:
+        raise RuntimeError(f"samtools depth failed (exit {proc.returncode})")
 
     log_info(f"BAM depth scan: {len(regions):,} zero-coverage regions ≥{min_length} bp")
     return regions
@@ -297,8 +285,7 @@ def blast_regions_vs_reads(
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError as e:
-        log_error(f"blastn failed: {e.stderr[:300]}")
-        return {}
+        raise RuntimeError(f"blastn failed (exit {e.returncode}): {(e.stderr or chr(32))[:300]}") from e
 
     hits: Dict[str, int] = {}
     for line in result.stdout.splitlines():

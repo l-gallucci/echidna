@@ -28,7 +28,7 @@ from .. import PACKAGE_ROOT
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
 
 
-PY_MIN = (3, 9)
+PY_MIN = (3, 8)
 
 # command to print each tool's version
 TOOL_VERSION_CMD = {

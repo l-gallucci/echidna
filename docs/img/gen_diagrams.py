@@ -12,14 +12,14 @@ import html
 
 # (num, title, tool, left_inputs[(type,label)], right_outputs[(type,label)])
 BRANCH_A = [
-    (1, "process-large-contigs", "echidna",
-     [("FASTA", "assembly"), ("DIR", "misassemblies")],
-     [("FASTA", "assembly_for_filtering"), ("DIR", "HQ_extracted")]),
-    (2, "anvi-script-find-misassemblies", "anvi'o (external)",
+    (1, "anvi-script-find-misassemblies", "anvi'o (external)",
      [("BAM", "HiFi mapping")],
      [("TSV", "*-clipping.txt")]),
+    (2, "process-large-contigs", "echidna",
+     [("FASTA", "assembly")],
+     [("FASTA", "assembly_for_filtering"), ("DIR", "HQ_extracted")]),
     (3, "check-read-chimeras", "echidna",
-     [("BAM", "HiFi mapping"), ("TSV", "kraken2/kaiju")],
+     [("FASTA", "assembly"), ("BAM", "HiFi mapping"), ("TSV", "kraken2/kaiju")],
      [("TSV", "chimera_read_report + windows")]),
     (4, "classify-clipping", "echidna",
      [("BAM", "HiFi mapping")],

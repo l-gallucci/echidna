@@ -26,6 +26,7 @@ Detection strategy
 """
 
 import csv
+import math
 import sys
 import argparse
 from pathlib import Path
@@ -85,17 +86,28 @@ def _load_contamination(checkm2_file: Path) -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 
 def _load_contig_foreign_frac(path: Path) -> Dict[str, float]:
-    """classify-contigs <out>.bins.tsv -> {bin: foreign_frac}."""
-    out: Dict[str, float] = {}
+    """Load measured fractions; zero resolved contigs means unavailable, not clean.
+
+    Older tables without n_contigs_resolved remain supported as measured input.
+    """
+    out = {}
     with open(path, newline='') as f:
-        for row in csv.DictReader(f, delimiter='\t'):
-            b = (row.get('bin') or '').strip()
-            if not b:
+        reader = csv.DictReader(f, delimiter='\t')
+        if not {'bin', 'foreign_frac'}.issubset(reader.fieldnames or []):
+            raise ValueError(f'Missing contig-taxonomy columns in {path}')
+        for row in reader:
+            name = (row.get('bin') or '').strip()
+            if not name:
                 continue
-            try:
-                out[b] = float(row.get('foreign_frac') or 0.0)
-            except ValueError:
-                out[b] = 0.0
+            fraction = float(row['foreign_frac'])
+            if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+                raise ValueError(f'Invalid foreign fraction for {name}')
+            resolved = row.get('n_contigs_resolved')
+            if resolved is not None and int(resolved) == 0:
+                continue
+            if name in out:
+                raise ValueError(f'Duplicate contig-taxonomy bin {name}')
+            out[name] = fraction
     return out
 
 

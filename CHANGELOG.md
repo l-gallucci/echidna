@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Parse native anvi’o clipping counts and zero-coverage ranges by column name,
+  preserving legacy schemas; distinguish no events from invalid/missing files.
+- Match hashed CheckM2 names to original contigs; retain contigs with missing
+  quality rows and write an identity map. Produce outputs with no large contigs.
+- Pass assembly/extension through workflow steps; share the taxonomy-window
+  column contract and write header-only outputs when needed.
+- Compute clipping-window depth from aligned CIGAR bases, include overlapping
+  long reads and avoid treating unpaired HiFi reads as discordant pairs.
+- Propagate external process failures instead of interpreting them as no hits.
+- Treat unresolved contig taxonomy and unmatched reads as missing evidence;
+  require at least ten classified reads for read-level risk.
+- Demote HQ without RNA evidence when the RNA gate is requested; refuse reused
+  populated selection outputs rather than leaving obsolete tier files.
+- Remove HQ contigs by exact FASTA identities instead of bin filenames.
+- Preserve regex/backslash/quote values when writing YAML configuration.
+
+### Added
+- Distribution metadata renamed to echidnaxomics; the executable and import
+  remain echidna, with no echidnaxomics command.
+- Isolated source/wheel builds, bundled workflow templates exportable with
+  setup-workflow --export-workflow, CFF citation metadata, CI checks and a local
+  Bioconda recipe renderer. No release or submission is performed automatically.
+- Snakemake execution tests with fixture upstream reports and real downstream
+  commands, covering RNA on/off, paths with spaces and reruns across tier changes.
+- Optional read-taxonomy roll-up via --taxonomy-rank/--nodes-dmp.
+- final-report organized_tier via --organized-quality; explicit circular header
+  annotations, contig counts and an independent near-complete candidate flag.
+- Maintained wiki source and instructions for publishing the separate GitHub wiki.
+
+### Compatibility notes
+- SSU comparisons preserve GTDB clade suffixes (_A/_B); this can expose previously
+  hidden disagreements. Existing sequence names and tier thresholds are unchanged.
+- Assembly filters require per-contig read-risk tables, not per-MAG verdicts.
+- --hq-list requires exact FASTA identifiers. Repeated organization needs a new
+  output directory. Added report columns must be read by header.
+- setup-workflow supports installed templates via --export-workflow; --repo
+  still selects an editable checkout. Chimera screening remains report-only.
+- Snakemake tracks individual FASTAs and owns the declared tool output directories
+  and organized/Selected; reruns recreate them to avoid stale tiers.
+
 ## [0.0.4] - 2026-10-14
 
 ### Changed (BREAKING output)

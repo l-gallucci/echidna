@@ -6,5 +6,5 @@ dependencies:
   - gtdbtk
   - pip
   - pip:
-      # Until published to PyPI, replace `echidna` with: -e /absolute/path/to/echidna
-      - echidna
+      # Until published to PyPI, replace `echidnaxomics` with: -e /absolute/path/to/echidna
+      - echidnaxomics

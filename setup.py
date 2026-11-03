@@ -4,13 +4,28 @@ Setup script for Echidna
 """
 
 from setuptools import setup, find_packages
+from setuptools.command.build_py import build_py
+import shutil
 from pathlib import Path
+
+# Ship workflow templates in wheels as well as source archives.
+ROOT = Path(__file__).resolve().parent
+
+
+class BuildPyWithWorkflow(build_py):
+    def run(self):
+        super().run()
+        shutil.copytree(ROOT / "workflow",
+                        Path(self.build_lib) / "echidna" / "workflow_templates",
+                        dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", ".snakemake"))
+
 
 # Read version from __init__.py
 import re
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
-    open("echidna/__init__.py").read(),
+    (ROOT / "echidna" / "__init__.py").read_text(encoding="utf-8"),
     re.MULTILINE,
 )
 version = {"__version__": _version_match.group(1) if _version_match else "0.0.0"}
@@ -22,7 +37,7 @@ if readme_file.exists():
     long_description = readme_file.read_text()
 
 setup(
-    name="echidna",
+    name="echidnaxomics",
     version=version.get("__version__", "1.0.0"),
     description="Echidna - metagenomic assembly, MAG integrity and chimera screening",
     long_description=long_description,
@@ -33,6 +48,7 @@ setup(
     license="MIT",
 
     packages=find_packages(),
+    cmdclass={"build_py": BuildPyWithWorkflow},
 
     python_requires=">=3.8",
     

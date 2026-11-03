@@ -1,63 +1,42 @@
-# Echidna — MAG quality-control workflow
-#
-# Each rule runs in its OWN conda env (envs/*.yaml) because CheckM2, GTDB-Tk and
-# GUNC pin conflicting Python/pandas/numpy/DIAMOND and cannot share one env.
-# Echidna itself is dependency-free and is pip-installed into every env.
-#
-# Pipeline (binning + anvi'o misassembly detection are assumed done upstream):
-#
-#   genomes_dir ─┬─> run-checkm2 ───┐
-#                ├─> run-gtdbtk ────┤
-#                ├─> run-mimag-rna ─┼─> organize-mags (HQ/MQ/LQ + rename + MIMAG rRNA/tRNA gate)
-#                └─> run-gunc ──────┘
-#                         └──────────> check-chimeras (GC + contamination + GUNC)
-#
-# run-mimag-rna (barrnap + tRNAscan-SE) is optional: set `mimag_rna: false` to
-# skip it; HQ is then based on completeness/contamination only.
-#
-# Run:
-#   snakemake --use-conda --cores 20 -s workflow/Snakefile --configfile workflow/config.yaml
-
+# Echidna MAG QC. Heavy tools run in separate conda environments.
+# Assembly cleaning is provided by `echidna misassembly-wf`, not this DAG.
 import os
+import shlex
+from pathlib import Path
 
-configfile: "workflow/config.yaml"
+configfile: os.path.join(workflow.basedir, "config.yaml")
 
-GENOMES = config["genomes_dir"]
-EXT     = config["genome_ext"]
-OUT     = config["outdir"]
-THREADS = config["threads"]
+GENOMES = str(config["genomes_dir"])
+EXT = str(config["genome_ext"]).lstrip(".")
+OUT = str(config["outdir"])
+THREADS = int(config["threads"])
+# Track individual FASTAs: editing a file need not update its parent directory.
+GENOME_FILES = sorted(str(p) for p in Path(GENOMES).glob(f"*.{EXT}") if p.is_file())
+if not GENOME_FILES:
+    raise ValueError(f"No genomes matching *.{EXT} in {GENOMES}")
+if THREADS < 1:
+    raise ValueError("threads must be positive")
 
-# Env mode: either Snakemake-built envs (--use-conda, envs/*.yaml) or the user's
-# own named envs wrapped with `conda run -n` (use_named_envs: true).
 USE_NAMED = bool(config.get("use_named_envs", False))
-ENVS = {
-    "echidna":  config.get("env_echidna", ""),
-    "checkm2": config.get("env_checkm2", ""),
-    "gtdbtk":  config.get("env_gtdbtk", ""),
-    "gunc":    config.get("env_gunc", ""),
-    "mimag":   config.get("env_mimag", ""),
-}
-
-# Optional MIMAG rRNA/tRNA HQ gate (barrnap + tRNAscan-SE)
-MIMAG_RNA   = bool(config.get("mimag_rna", False))
-MIMAG_KING  = config.get("mimag_kingdom", "bac")
+ENVS = {role: config.get("env_" + role, "")
+        for role in ("echidna", "checkm2", "gtdbtk", "gunc", "mimag")}
+MIMAG_RNA = bool(config.get("mimag_rna", False))
+MIMAG_KING = config.get("mimag_kingdom", "bac")
 
 
 def pre(role):
-    """Command prefix: `conda run -n <env> ` in named-env mode, else empty."""
+    # Unspecified roles use PATH, retaining the mixed named-env/PATH mode.
     name = ENVS.get(role, "")
-    return f"conda run -n {name} " if (USE_NAMED and name) else ""
+    return "conda run -n " + shlex.quote(name) + " " if USE_NAMED and name else ""
 
 
 rule all:
     input:
         f"{OUT}/chimera_report.tsv",
         f"{OUT}/organized/merged_quality.tsv",
+        f"{OUT}/organized/Selected",
 
 
-# Named preset for the MAG-quality branch (same targets as `all`), so you can be
-# explicit: `snakemake all_mag_quality ...`. The misassembly branch is not in
-# this Snakefile; run it with `echidna misassembly-wf` (PacBio HiFi only).
 rule all_mag_quality:
     input:
         rules.all.input
@@ -65,43 +44,40 @@ rule all_mag_quality:
 
 rule run_checkm2:
     input:
-        genomes=GENOMES,
+        genomes=GENOME_FILES,
     output:
-        report=f"{OUT}/checkm2/quality_report.tsv",
+        outdir=directory(f"{OUT}/checkm2"),
     params:
         pre=pre("checkm2"),
-        outdir=f"{OUT}/checkm2",
-        db=("--database " + config["checkm2_db"]) if config.get("checkm2_db") else "",
+        db=("--database " + shlex.quote(str(config["checkm2_db"]))) if config.get("checkm2_db") else "",
     threads: THREADS
     conda:
         "envs/checkm2.yaml"
     shell:
-        "{params.pre}echidna run-checkm2 --genome-dir {input.genomes} --output {params.outdir} "
-        "--extension {EXT} --threads {threads} --force {params.db}"
+        "{params.pre}echidna run-checkm2 --genome-dir {GENOMES:q} --output {output.outdir:q} "
+        "--extension {EXT:q} --threads {threads} --force {params.db}"
 
 
 rule run_gtdbtk:
     input:
-        genomes=GENOMES,
+        genomes=GENOME_FILES,
     output:
-        # GTDB-Tk writes bac120/ar53 summaries whose exact set varies; mark the dir
         outdir=directory(f"{OUT}/gtdbtk"),
     params:
         pre=pre("gtdbtk"),
-        # reuse an existing gtdbtk.*.summary.tsv instead of re-classifying
         skip=("--skip-existing" if config.get("gtdbtk_skip_existing", True) else ""),
     threads: THREADS
     conda:
         "envs/gtdbtk.yaml"
     shell:
-        "GTDBTK_DATA_PATH={config[gtdbtk_data]} "
-        "{params.pre}echidna run-gtdbtk --genome-dir {input.genomes} --output {output.outdir} "
-        "--extension {EXT} --cpus {threads} {params.skip}"
+        "GTDBTK_DATA_PATH={config[gtdbtk_data]:q} "
+        "{params.pre}echidna run-gtdbtk --genome-dir {GENOMES:q} --output {output.outdir:q} "
+        "--extension {EXT:q} --cpus {threads} {params.skip}"
 
 
 rule run_gunc:
     input:
-        genomes=GENOMES,
+        genomes=GENOME_FILES,
     output:
         outdir=directory(f"{OUT}/gunc"),
     params:
@@ -110,34 +86,30 @@ rule run_gunc:
     conda:
         "envs/gunc.yaml"
     shell:
-        "{params.pre}echidna run-gunc --genome-dir {input.genomes} --output {output.outdir} "
-        "--file-suffix .{EXT} --threads {threads} --db-file {config[gunc_db]}"
+        "{params.pre}echidna run-gunc --genome-dir {GENOMES:q} --output {output.outdir:q} "
+        "--file-suffix .{EXT:q} --threads {threads} --db-file {config[gunc_db]:q}"
 
 
 rule run_mimag_rna:
     input:
-        genomes=GENOMES,
+        genomes=GENOME_FILES,
     output:
-        summary=f"{OUT}/mimag_rna/mimag_rna_summary.tsv",
+        outdir=directory(f"{OUT}/mimag_rna"),
     params:
         pre=pre("mimag"),
-        outdir=f"{OUT}/mimag_rna",
     threads: THREADS
     conda:
         "envs/mimag.yaml"
     shell:
-        "{params.pre}echidna run-mimag-rna --genome-dir {input.genomes} --output {params.outdir} "
-        "--extension {EXT} --kingdom {MIMAG_KING} --threads {threads}"
+        "{params.pre}echidna run-mimag-rna --genome-dir {GENOMES:q} --output {output.outdir:q} "
+        "--extension {EXT:q} --kingdom {MIMAG_KING:q} --threads {threads}"
 
 
 def organize_inputs(_):
-    """Inputs for organize-mags; add the MIMAG rRNA/tRNA summary when enabled."""
-    inputs = {
-        "checkm2": f"{OUT}/checkm2/quality_report.tsv",
-        "gtdbtk":  f"{OUT}/gtdbtk",
-    }
+    inputs = {"checkm2": f"{OUT}/checkm2", "gtdbtk": f"{OUT}/gtdbtk",
+              "genomes": GENOME_FILES}
     if MIMAG_RNA:
-        inputs["mimag"] = f"{OUT}/mimag_rna/mimag_rna_summary.tsv"
+        inputs["mimag"] = f"{OUT}/mimag_rna"
     return inputs
 
 
@@ -146,33 +118,36 @@ rule organize_mags:
         unpack(organize_inputs),
     output:
         merged=f"{OUT}/organized/merged_quality.tsv",
+        # Snakemake must remove old tier copies when it reruns this rule.
+        selected=directory(f"{OUT}/organized/Selected"),
     params:
         pre=pre("echidna"),
         outdir=f"{OUT}/organized",
-        checkm2_root=f"{OUT}/checkm2",
-        mimag=(f"--mimag-rna-dir {OUT}/mimag_rna" if MIMAG_RNA else ""),
+        mimag=("--mimag-rna-dir " + shlex.quote(f"{OUT}/mimag_rna")) if MIMAG_RNA else "",
     conda:
         "envs/echidna.yaml"
     shell:
-        "{params.pre}echidna organize-mags --checkm2-root {params.checkm2_root} "
-        "--genomes-dir {GENOMES} --gtdbtk-dir {input.gtdbtk} "
-        "--output {params.outdir} --rename --copy "
-        "--sample-regex '{config[sample_regex]}' --tax-level {config[tax_level]} "
-        "--extensions {EXT} {params.mimag}"
+        "{params.pre}echidna organize-mags --checkm2-root {input.checkm2:q} "
+        "--genomes-dir {GENOMES:q} --gtdbtk-dir {input.gtdbtk:q} "
+        "--output {params.outdir:q} --rename --copy "
+        "--sample-regex {config[sample_regex]:q} --tax-level {config[tax_level]:q} "
+        "--extensions {EXT:q} {params.mimag}"
 
 
 rule check_chimeras:
     input:
-        checkm2=f"{OUT}/checkm2/quality_report.tsv",
+        checkm2=f"{OUT}/checkm2",
         gtdbtk=f"{OUT}/gtdbtk",
         gunc=f"{OUT}/gunc",
+        genomes=GENOME_FILES,
     output:
         report=f"{OUT}/chimera_report.tsv",
     params:
         pre=pre("echidna"),
+        report=f"{OUT}/checkm2/quality_report.tsv",
     conda:
         "envs/echidna.yaml"
     shell:
-        "{params.pre}echidna check-chimeras --bins-dir {GENOMES} --output {output.report} "
-        "--gtdbtk-dir {input.gtdbtk} --checkm2-report {input.checkm2} "
-        "--gunc-dir {input.gunc} --extensions {EXT}"
+        "{params.pre}echidna check-chimeras --bins-dir {GENOMES:q} --output {output.report:q} "
+        "--gtdbtk-dir {input.gtdbtk:q} --checkm2-report {params.report:q} "
+        "--gunc-dir {input.gunc:q} --extensions {EXT:q}"

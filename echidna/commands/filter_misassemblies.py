@@ -34,7 +34,7 @@ be used downstream.
 Chimera awareness
 -----------------
   --chimera-report PATH
-      TSV produced by check-chimeras or check-read-chimeras.  Any contig
+      Per-contig risk TSV produced by check-read-chimeras.  Any contig
       listed as High or Medium risk (--chimera-risk-threshold) is treated as
       hq_problematic even if it has no clipping zone, preventing it from
       being silently extracted as a clean HQ genome.
@@ -47,7 +47,7 @@ import argparse
 from pathlib import Path
 from typing import Set, Dict, List, Tuple, Optional
 
-from ..utils.fasta import read_fasta_streaming, write_fasta, extract_contig_id
+from ..utils.fasta import read_fasta_streaming, write_fasta, extract_contig_id, circular_annotation
 from ..utils.misassembly import load_clipping_positions, load_clipping_data
 from ..utils.validation import validate_file_exists, validate_dir_exists
 from ..utils.logging import log_info, log_error, log_warning, print_header, print_section
@@ -75,7 +75,9 @@ def load_chimera_flagged(
 
     with open(chimera_report, newline='') as f:
         reader = csv.DictReader(f, delimiter='\t')
-        name_col = 'contig' if 'contig' in (reader.fieldnames or []) else 'bin'
+        if 'contig' not in (reader.fieldnames or []):
+            raise ValueError('Assembly filtering needs a per-contig chimera_risk report from check-read-chimeras; a per-MAG verdict needs an explicit bin-to-contig mapping')
+        name_col = 'contig'
         for row in reader:
             name = (row.get(name_col) or '').strip()
             risk = (row.get('chimera_risk') or '').strip()
@@ -112,8 +114,9 @@ def is_circular_candidate(
       1. FASTA header contains a circularity annotation (Flye, Unicycler, …)
       2. Sequence length >= min_length (length-based heuristic)
     """
-    if _CIRCULAR_RE.search(header):
-        return True
+    annotated = circular_annotation(header)
+    if annotated is not None:
+        return annotated
     return seq_len >= min_length
 
 
@@ -122,24 +125,11 @@ def is_circular_candidate(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def get_hq_contig_ids(hq_dir: Path) -> Set[str]:
-    """
-    Extract contig IDs from HQ genome filenames in hq_dir.
-    Handles common assembler naming conventions.
-    """
-    hq_ids: Set[str] = set()
-
-    if not hq_dir or not hq_dir.exists():
-        log_warning(f"HQ directory not found: {hq_dir}")
-        return hq_ids
-
-    for filename in hq_dir.iterdir():
-        if filename.name.startswith('.'):
-            continue
-        file_id = extract_contig_id(filename.stem)
-        if file_id:
-            hq_ids.add(file_id)
-
-    return hq_ids
+    """Read full contig identities from HQ FASTAs (including multi-contig MAGs)."""
+    if not hq_dir or not hq_dir.is_dir():
+        raise ValueError(f'HQ directory not found: {hq_dir}')
+    from .remove_hq_contigs import load_hq_ids_from_dir
+    return load_hq_ids_from_dir(hq_dir)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -157,6 +147,9 @@ def split_contig(
     Cuts are made at the exact clipping position (no flanking removal).
     """
     fragments = []
+    if any(p < 0 or p > len(sequence) for p in split_positions):
+        raise ValueError(f'Clipping coordinate outside {contig_name}')
+    split_positions = sorted(set(p for p in split_positions if 0 < p < len(sequence)))
     cuts = [0] + split_positions + [len(sequence)]
 
     for i in range(len(cuts) - 1):
@@ -210,18 +203,19 @@ def classify_contigs(
 
     log_info("Classifying contigs…")
 
-    for contig_name, seq in read_fasta_streaming(assembly):
+    for header, seq in read_fasta_streaming(assembly, full_header=True):
+        contig_name = header.split()[0]
         seq_len = len(seq)
         seq_lengths[contig_name] = seq_len
 
         contig_id = extract_contig_id(contig_name)
-        is_hq = contig_id in hq_ids
+        is_hq = contig_name in hq_ids
         has_clip = contig_name in clipping_positions
         is_chimeric = contig_name in chimera_flagged
         is_circular = (
             split_hq_circular
             and is_hq
-            and is_circular_candidate(contig_name, seq_len, hq_circular_min_length)
+            and is_circular_candidate(header, seq_len, hq_circular_min_length)
         )
 
         if is_hq and has_clip and is_circular:
@@ -289,9 +283,8 @@ def process_assembly(
 
     clipping_positions = load_clipping_positions(misassembly_dir, effective_min_cov)
 
-    if not clipping_positions and not dry_run:
-        log_error(f"No clipping data found in {misassembly_dir}")
-        sys.exit(1)
+    if not clipping_positions:
+        log_info("No clipping events; applying only HQ and length selection")
 
     # ── 3. Chimera report ─────────────────────────────────────────────────
     chimera_flagged: Set[str] = set()
@@ -532,7 +525,7 @@ Examples
 
     # ── Chimera awareness ─────────────────────────────────────────────────
     parser.add_argument('--chimera-report', type=Path,
-                        help='TSV from check-chimeras or check-read-chimeras; '
+                        help='Per-contig TSV from check-read-chimeras; '
                              'chimeric HQ contigs are treated as problematic')
     parser.add_argument('--chimera-risk-threshold',
                         choices=['Low', 'Medium', 'High'], default='Medium',

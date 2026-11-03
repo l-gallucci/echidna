@@ -38,14 +38,14 @@ HiFi reads with `minimap2 -ax map-hifi`, keep supplementary alignments (do not
 
 | Step | Command | External input (type) | Produces (type) | Env |
 |---|---|---|---|---|
-| 1 | `process-large-contigs` | assembly (FASTA), misassemblies (DIR) | `assembly_for_filtering.fa` (FASTA), `HQ_extracted/` (DIR) | echidna (CheckM2 via `--checkm2-env`) |
-| 2 | `anvi-script-find-misassemblies` (external) | HiFi mapping (BAM) | `*-clipping.txt` (TSV) | anvio-9 |
-| 3 | `check-read-chimeras` | HiFi mapping (BAM), Kraken2/Kaiju per-read (TSV) | `chimera_read_report.tsv`, `chimera_read_windows.tsv` (TSV) | echidna |
+| 1 | `anvi-script-find-misassemblies` (external) | HiFi mapping (BAM) | `*-clipping.txt` (TSV) | anvio-9 |
+| 2 | `process-large-contigs` | assembly (FASTA), misassemblies (DIR) | `assembly_for_filtering.fa` (FASTA), `HQ_extracted/` (DIR) | echidna (CheckM2 via `--checkm2-env`) |
+| 3 | `check-read-chimeras` | assembly (FASTA), HiFi mapping (BAM), Kraken2/Kaiju per-read (TSV) | `chimera_read_report.tsv`, `chimera_read_windows.tsv` (TSV) | echidna |
 | 4 | `classify-clipping` | HiFi mapping (BAM) | `clipping_classified.tsv` (TSV) | echidna |
 | 5 | `filter-misassemblies` | none (uses steps 1-4) | `assembly_clean.fa` (FASTA) | echidna |
 
 Steps 3 and 4 are optional but recommended: step 3 adds read-level taxonomy, step
-4 labels each clipping position. Step 5 is the only required follow-up to step 1.
+4 labels each clipping position. Step 5 is the only required follow-up to step 2.
 
 ## Branch B - MAG quality and taxonomy
 
@@ -130,3 +130,6 @@ script and rerun it if the pipeline changes:
 ```bash
 python docs/img/gen_diagrams.py docs/img
 ```
+
+
+Current operational note: run anvi’o BEFORE `process-large-contigs`, since the latter consumes its clipping output. `classify-clipping` is report-only; quality organization does not apply a chimera exclusion policy. See [the maintained wiki](../wiki/Home.md).

@@ -223,8 +223,9 @@ def apply_mimag_rna_gate(records: List[dict], mimag: Dict[str, Dict]) -> Dict:
         rna = lookup_mimag_rna(mimag, rec['name'])
         if rna is None:
             rec['mimag_rna_ok'] = ''
-            rec['hq_rna_demoted'] = ''
+            rec['hq_rna_demoted'] = rec['tier'] == 'HQ'
             if rec['tier'] == 'HQ':
+                rec['tier'] = 'MQ'
                 n_missing += 1
         else:
             rec['mimag_rna_ok'] = bool(rna.get('mimag_rna_ok'))
@@ -238,7 +239,7 @@ def apply_mimag_rna_gate(records: List[dict], mimag: Dict[str, Dict]) -> Dict:
     if n_demoted:
         log_warning(f"{n_demoted} genome(s) demoted HQ->MQ (failed MIMAG rRNA/tRNA)")
     if n_missing:
-        log_warning(f"{n_missing} HQ genome(s) had no rRNA/tRNA record; left as HQ")
+        log_warning(f"{n_missing} HQ genome(s) had no rRNA/tRNA record; demoted to MQ (unassessed RNA)")
     return dict(counts)
 
 
@@ -288,6 +289,9 @@ def link_or_copy_genomes(records: List[dict], genomes_dir: Path, output_dir: Pat
     }
 
     if not dry_run:
+        selected = output_dir / 'Selected'
+        if selected.exists() and any(selected.rglob('*.*')):
+            raise ValueError(f'Selected output is not empty: {selected}. Use a fresh output directory to avoid stale tiers.')
         for tier in selected_tiers:
             (output_dir / "Selected" / tier).mkdir(parents=True, exist_ok=True)
 
@@ -500,15 +504,18 @@ def run(args):
         validate_dir_exists(args.mimag_rna_dir, "MIMAG rRNA/tRNA directory")
         print_section("Applying MIMAG rRNA/tRNA Gate")
         mimag = load_mimag_rna(args.mimag_rna_dir)
-        if mimag:
-            tier_counts = apply_mimag_rna_gate(records, mimag)
-            gated = True
+        tier_counts = apply_mimag_rna_gate(records, mimag)
+        gated = True
 
     print_section("Quality Tier Summary")
     for tier in ['HQ', 'MQ', 'LQ', 'Fail']:
         print(f"  {tier:4s}: {tier_counts.get(tier, 0):>8,} genomes")
     print(f"  {'Total':4s}: {len(records):>8,} genomes")
 
+    if not args.dry_run:
+        selected = args.output / 'Selected'
+        if selected.exists() and any(selected.rglob('*.*')):
+            raise ValueError(f'Non-empty selection {selected}; use a fresh output directory')
     merged_file = args.output / "merged_quality.tsv"
     if not args.dry_run:
         fieldnames = ['report_path', 'name', 'completeness', 'contamination', 'tier']

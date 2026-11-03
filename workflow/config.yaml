@@ -33,7 +33,7 @@ mimag_kingdom: "bac"        # bac | arc | euk (barrnap/tRNAscan-SE kingdom)
 # Pass --skip-existing to run-gtdbtk (reuse an existing gtdbtk.*.summary.tsv).
 # NOTE: Snakemake deletes a rule's output dir before re-running it, so this mainly
 # helps standalone/`conda run` use. To truly reuse results in the workflow, place
-# them at <outdir>/gtdbtk and keep them newer than genomes_dir so Snakemake skips
+# them at <outdir>/gtdbtk and keep them newer than all input FASTAs so Snakemake skips
 # the job entirely.
 gtdbtk_skip_existing: true
 

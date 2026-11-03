@@ -2,6 +2,7 @@
 Misassembly data parsing utilities (anvi'o clipping files)
 """
 
+import csv
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple
@@ -22,60 +23,32 @@ def find_clipping_files(misassembly_dir: Path) -> List[Path]:
 
 
 def parse_clipping_files(clipping_files: List[Path]) -> Dict[str, List[ClipRecord]]:
+    """Read native anvi'o contig/pos/clipping or legacy Echidna columns.
+
+    Header-only tables mean no events. Invalid schemas/values are errors,
+    never a negative biological result. Positions are zero-based.
     """
-    Parse *-clipping.txt files produced by anvi-script-find-misassemblies.
-
-    Expected column layout (tab-separated, one header line):
-        contig_name  sample_name  position  clipping_coverage  [...]
-
-    Returns:
-        dict mapping contig_name -> sorted list of (position, coverage) tuples.
-        If coverage is absent or non-numeric, it defaults to 1 so downstream
-        filters can still work without crashing.
-    """
-    clipping_data: Dict[str, List[ClipRecord]] = defaultdict(list)
-
-    for file_path in clipping_files:
-        log_info(f"  Reading: {file_path.name}")
-        with open(file_path) as f:
-            f.readline()  # skip header
-            for lineno, line in enumerate(f, start=2):
-                if not line.strip():
-                    continue
-                fields = line.strip().split('\t')
-                if len(fields) < 3:
-                    log_warning(
-                        f"Skipping malformed line {lineno} in {file_path.name} "
-                        f"(expected ≥3 fields, got {len(fields)})"
-                    )
-                    continue
-
-                contig_name = fields[0]
-
+    data = defaultdict(dict)
+    for path in clipping_files:
+        with open(path) as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            fields = set(reader.fieldnames or [])
+            native = {'contig', 'pos', 'clipping'}.issubset(fields)
+            legacy = {'contig_name', 'position'}.issubset(fields)
+            if not (native or legacy):
+                raise ValueError(f'Unrecognised clipping columns in {path}')
+            for lineno, row in enumerate(reader, 2):
                 try:
-                    position = int(fields[2])
-                except ValueError:
-                    log_warning(
-                        f"Skipping line {lineno} in {file_path.name}: "
-                        f"position '{fields[2]}' is not an integer"
-                    )
-                    continue
-
-                # Field 4 (index 3) is the clipping read count
-                coverage = 1
-                if len(fields) >= 4:
-                    try:
-                        coverage = int(fields[3])
-                    except ValueError:
-                        pass  # non-numeric coverage → keep default 1
-
-                clipping_data[contig_name].append((position, coverage))
-
-    # Sort each contig's records by position
-    for contig in clipping_data:
-        clipping_data[contig].sort(key=lambda r: r[0])
-
-    return dict(clipping_data)
+                    name = row['contig' if native else 'contig_name'].strip()
+                    pos = int(row['pos' if native else 'position'])
+                    cov = int(row['clipping'] if native else row.get('clipping_coverage', '1'))
+                    if not name or pos < 0 or cov < 0:
+                        raise ValueError('negative value or empty contig')
+                except (ValueError, TypeError, AttributeError) as e:
+                    raise ValueError(f'Invalid clipping row {lineno} in {path}: {e}') from e
+                # Repeated samples at the same position must not create repeated cuts.
+                data[name][pos] = max(cov, data[name].get(pos, 0))
+    return {name: sorted(records.items()) for name, records in data.items()}
 
 
 def filter_by_coverage(
@@ -116,7 +89,7 @@ def load_clipping_data(
     """
     files = find_clipping_files(misassembly_dir)
     if not files:
-        return {}
+        raise ValueError(f"No *-clipping.txt files in {misassembly_dir}")
 
     data = parse_clipping_files(files)
     if min_coverage > 1:

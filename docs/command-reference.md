@@ -35,7 +35,7 @@ Required:
 Optional:
   --kraken2-report PATH       Kraken2 report (adds taxon names; with Kraken2)
   --kaiju-names PATH          NCBI names.dmp (adds taxon names; with Kaiju)
-  --assembly PATH             Assembly FASTA (for contig lengths if not in BAM)
+  --assembly PATH             Assembly FASTA (required for read-level windows; lengths are not read from BAM)
   --min-mapq INT              Min mapping quality (default: 20)
   --min-reads INT             Min reads per contig to report (default: 10)
   --window INT                Sliding window size in bp (default: 10000)
@@ -286,7 +286,7 @@ Clipping selection (mutually exclusive):
   --min-clip-coverage N       Only split where >=N reads are clipped
 
 Chimera awareness:
-  --chimera-report PATH       TSV from check-chimeras or check-read-chimeras
+  --chimera-report PATH       Per-contig risk TSV from check-read-chimeras (per-MAG verdicts are rejected)
   --chimera-risk-threshold    Min risk level to act on (default: Medium)
 
 HQ circular handling:
@@ -385,10 +385,9 @@ Other:
   --dry-run
 ```
 
-MiMAG note: the defaults split the MIMAG medium band into MQ/LQ. For strict MIMAG
-tiers (HQ comp>90/cont<5, MQ comp>=50/cont<10, LQ comp<50) run with
-`--mq-comp-min 50 --mq-cont-max 10 --lq-comp-min 0 --lq-cont-max 10`. Full MIMAG HQ
-also needs rRNA/tRNA (`--mimag-rna-dir`).
+MiMAG note: the defaults split the MIMAG medium band into MQ/LQ. To widen the medium band use `--mq-comp-min 50 --lq-comp-min 0`.
+Threshold comparisons remain inclusive and are not strict MIMAG boundary rules.
+The optional RNA gate requires `--mimag-rna-dir`; absent RNA records demote HQ to MQ.
 
 ## run-checkm2
 
@@ -670,7 +669,7 @@ Columns: `genome`, `completeness`, `contamination`, `tier` (CheckM2), `taxonomy`
 `gunc_mmseqs_concordance` (True/False/NA: do GUNC pass.GUNC and MMseqs
 classify-contigs agree on chimeric-or-not), `concerns`.
 
-`concerns` collects the red flags - `contam>10`, `chimera_High`, `chimera_Medium`,
+`concerns` collects the red flags - `contam>10`, `chimeric`, `chimera_check`,
 `contig_chimera`, `ssu_disagree`, `mimag_rna_incomplete` - so you can sort/filter
 on it. An empty `concerns` means no red flag fired; it is a summary, not a formal
 pass (apply your own thresholds). The run prints a tally of each concern.
@@ -684,3 +683,29 @@ echidna final-report \
   --ssu-report ssu_taxonomy.tsv \
   -o final_report.tsv
 ```
+
+
+## Additions after the 0.0.4 audit
+
+- `check-read-chimeras --taxonomy-rank <rank> --nodes-dmp <classifier nodes.dmp>`
+  optionally compares reads at one rank; otherwise raw taxids are used. At least
+  10 classified reads are required; missing classifier matches are not taxa.
+- `final-report --organized-quality <merged_quality.tsv>` adds `organized_tier`
+  without changing historical CheckM2 `tier`. `--genomes-dir` adds `n_contigs`,
+  `circular_annotated` (explicit header metadata, single-contig MAGs) and
+  `near_complete_candidate` (>=99% completeness, <=5% contamination).
+- GTDB clade suffixes are preserved in SSU comparisons. A formerly normalized
+  agreement can become a disagreement; FASTA filenames are not changed.
+- Populated `Selected/` outputs are refused. Use a fresh output directory when
+  repeating organization. `--hq-list` accepts exact FASTA IDs.
+- Native anvi’o headers are parsed by name; zero-event tables are valid,
+  malformed tables and failed external processes are errors.
+
+
+### Exporting installed workflow templates
+
+`echidna setup-workflow --export-workflow ./my-workflow` copies the templates
+bundled in a wheel to a new directory, without writing into site-packages.
+The destination must not exist. In a checkout, `--repo` still selects the local
+source installed into tool envs. `--dry-run` previews an export without writing.
+The installable distribution is `echidnaxomics`; all commands remain `echidna`.

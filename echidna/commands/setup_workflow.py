@@ -4,13 +4,15 @@ Echidna - setup-workflow command
 
 One command to prepare the Snakemake workflow:
   1. points each workflow/envs/*.yaml at this local checkout
-     (replaces the `- echidna` pip line with `- -e <repo>`),
+     (replaces the `- echidnaxomics` pip line with `- -e <repo>`),
   2. writes the paths/threads into workflow/config.yaml, and
   3. optionally builds every per-rule conda env (`--install`).
 
 Pure file edits otherwise — no YAML dependency, comments in config.yaml are kept.
 """
 
+import json
+import shlex
 import re
 import sys
 import shutil
@@ -33,30 +35,31 @@ def set_yaml_scalar(text: str, key: str, value, quote: bool = False) -> str:
     Replace (or append) a top-level `key: value` line in a YAML text, preserving
     comments and layout. Only touches a line that starts at column 0.
     """
-    rendered = f'"{value}"' if quote else str(value)
+    rendered = json.dumps(str(value), ensure_ascii=False) if quote else str(value)
     pattern = re.compile(rf'^{re.escape(key)}:.*$', re.MULTILINE)
     if pattern.search(text):
-        return pattern.sub(f'{key}: {rendered}', text)
+        return pattern.sub(lambda _: f'{key}: {rendered}', text)
     # append if missing
     sep = '' if text.endswith('\n') else '\n'
     return f'{text}{sep}{key}: {rendered}\n'
 
 
 def patch_env_files(envs_dir: Path, repo: Path, dry_run: bool) -> int:
-    """Replace the `- echidna` pip entry with `- -e <repo>` in every env yaml."""
+    """Replace the distribution pip entry with `- -e <repo>` in every env yaml."""
     env_files = sorted(envs_dir.glob('*.yaml'))
     if not env_files:
         log_warning(f"No env files found in {envs_dir}")
         return 0
 
-    # matches a list item that is exactly `echidna` or an existing `-e <path>`
-    entry_re = re.compile(r'^(?P<indent>\s*-\s+)(echidna|-e\s+\S+)\s*$', re.MULTILINE)
+    # Match the current/legacy distribution or an existing editable requirement.
+    entry_re = re.compile(r'^(?P<indent>\s*-\s+)(echidnaxomics|echidna|-e\s+.+|\"-e .+\")\s*$', re.MULTILINE)
     patched = 0
     for env_file in env_files:
         text = env_file.read_text()
-        new_text, n = entry_re.subn(lambda m: f"{m.group('indent')}-e {repo}", text)
+        entry = json.dumps("-e " + shlex.quote(str(repo)), ensure_ascii=False)
+        new_text, n = entry_re.subn(lambda m: f"{m.group('indent')}{entry}", text)
         if n == 0:
-            log_warning(f"  {env_file.name}: no `- echidna` pip entry found, left as-is")
+            log_warning(f"  {env_file.name}: no Echidna distribution pip entry found, left as-is")
             continue
         if dry_run:
             log_info(f"  Would patch {env_file.name}: pip -> -e {repo}")
@@ -85,6 +88,8 @@ Examples:
 """
     )
 
+    parser.add_argument('--export-workflow', type=Path, default=None,
+                        help='Copy bundled workflow templates into a new writable directory')
     parser.add_argument('--repo', type=Path, default=None,
                         help='Path to the Echidna checkout (default: auto-detected)')
     parser.add_argument('--workflow-dir', type=Path, default=None,
@@ -130,13 +135,32 @@ def run(args):
     print_header("Echidna - Setup Workflow")
 
     repo = (args.repo or default_repo()).resolve()
-    workflow_dir = (args.workflow_dir or (repo / 'workflow')).resolve()
+    export = getattr(args, 'export_workflow', None)
+    if export and args.workflow_dir:
+        log_error('Use either --export-workflow or --workflow-dir.')
+        sys.exit(1)
+    if export:
+        export = export.resolve()
+        source = PACKAGE_ROOT / 'workflow_templates'
+        if not source.is_dir():
+            source = repo / 'workflow'
+        if export.exists():
+            log_error(f'Export destination already exists: {export}; choose a new directory.')
+            sys.exit(1)
+        if not source.is_dir():
+            log_error('Bundled workflow templates not found; use --repo with a checkout.')
+            sys.exit(1)
+        if args.dry_run:
+            log_info(f'Would export workflow templates to {export}; no files written.')
+            return
+        shutil.copytree(source, export)
+    workflow_dir = (export or args.workflow_dir or (repo / 'workflow')).resolve()
     envs_dir = workflow_dir / 'envs'
     config_file = workflow_dir / 'config.yaml'
 
     if not workflow_dir.is_dir():
         log_error(f"Workflow directory not found: {workflow_dir}")
-        log_error("Pass --repo /path/to/echidna or --workflow-dir explicitly.")
+        log_error("Use --export-workflow ./workflow to copy bundled templates, or pass --repo /path/to/echidna.")
         sys.exit(1)
     if not config_file.exists():
         log_error(f"config.yaml not found: {config_file}")
@@ -147,7 +171,10 @@ def run(args):
 
     # 1. patch env files to install this checkout
     print_section("Patching env files")
-    patch_env_files(envs_dir, repo, args.dry_run)
+    if (repo / 'setup.py').is_file() and (repo / 'echidna').is_dir():
+        patch_env_files(envs_dir, repo, args.dry_run)
+    else:
+        log_info('Installed distribution: retaining echidnaxomics pip entries in env templates.')
 
     # 2. write config values
     print_section("Updating config.yaml")
@@ -247,8 +274,10 @@ def run(args):
                 log_error(f"Env creation failed (exit {rc})")
                 sys.exit(rc)
 
-    log_info("\n✓ Done! Next: echidna fetch-databases ... then "
-             "snakemake --use-conda --cores N -s workflow/Snakefile --configfile workflow/config.yaml")
+    log_info('\nDone. Configure database paths, then run:')
+    log_info('  snakemake --cores N ' + ('' if any_env else '--use-conda ') +
+             '-s ' + shlex.quote(str(workflow_dir / 'Snakefile')) +
+             ' --configfile ' + shlex.quote(str(config_file)))
 
 
 if __name__ == '__main__':

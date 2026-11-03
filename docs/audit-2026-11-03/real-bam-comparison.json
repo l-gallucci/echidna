@@ -1,0 +1,35 @@
+{
+  "before": {
+    "uniform": {
+      "local_depth": 0,
+      "depth_ratio": 0.0,
+      "discordant_fraction": "N/A",
+      "n_clipped_reads": 0,
+      "sa_partner_support": 0
+    },
+    "clipped": {
+      "local_depth": 0,
+      "depth_ratio": 0.0,
+      "discordant_fraction": "N/A",
+      "n_clipped_reads": 0,
+      "sa_partner_support": 0
+    }
+  },
+  "after": {
+    "uniform": {
+      "local_depth": 10.0,
+      "depth_ratio": 1.0,
+      "discordant_fraction": "N/A",
+      "n_clipped_reads": 0,
+      "sa_partner_support": 0
+    },
+    "clipped": {
+      "local_depth": 4.9950049950049955,
+      "depth_ratio": 1.11,
+      "discordant_fraction": "N/A",
+      "n_clipped_reads": 10,
+      "sa_partner_support": 10
+    }
+  },
+  "samtools": "samtools 1.21"
+}

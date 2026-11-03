@@ -90,8 +90,8 @@ def test_silva_lineage_parts_drops_accession_without_breaking_taxa():
     assert parts[6] == 'Methanosarcina mazei'
 
 
-def test_normalize_taxon_strips_gtdb_suffix():
-    assert normalize_taxon('Firmicutes_A') == 'firmicutes'
+def test_normalize_taxon_preserves_gtdb_suffix():
+    assert normalize_taxon('Firmicutes_A') == 'firmicutes_a'
     assert normalize_taxon('Gammaproteobacteria') == 'gammaproteobacteria'
     assert normalize_taxon('Unclassified') == ''
     assert normalize_taxon(None) == ''
@@ -100,7 +100,7 @@ def test_normalize_taxon_strips_gtdb_suffix():
 def test_taxa_agree():
     assert taxa_agree('Gammaproteobacteria', 'Gammaproteobacteria') is True
     assert taxa_agree('Alphaproteobacteria', 'Gammaproteobacteria') is False
-    assert taxa_agree('Firmicutes_A', 'Firmicutes') is True       # suffix-normalised
+    assert taxa_agree('Firmicutes_A', 'Firmicutes') is False      # distinct GTDB clades
     assert taxa_agree(None, 'Gammaproteobacteria') is None         # unknown -> no judgement
     assert taxa_agree('Gammaproteobacteria', 'Unclassified') is None
 

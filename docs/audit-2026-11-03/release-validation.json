@@ -1,0 +1,102 @@
+{
+  "date": "2026-11-03",
+  "base_commit": "de465bcd7dc47cba7be1e157f1af5e97f38bc0ba",
+  "scope": "Uncommitted release preparation; no submission or publication",
+  "distribution": "echidnaxomics",
+  "command": "echidna",
+  "python_import": "echidna",
+  "new_command_added": false,
+  "tests": {
+    "tests": "222",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "14.312",
+    "timestamp": "2026-11-03T18:42:45.708265+01:00"
+  },
+  "test_python": "3.12.8",
+  "snakemake_version": "9.27.1",
+  "samtools_version": "1.21",
+  "dag_checks": [
+    "RNA enabled/disabled",
+    "external working directory",
+    "spaces in input/output/database paths",
+    "real downstream organize-mags and check-chimeras",
+    "Clean and Check control verdicts",
+    "forced HQ to MQ transition removes obsolete copies",
+    "edited FASTA reruns upstream QC",
+    "no-op rerun"
+  ],
+  "dag_upstream_is_simulated": true,
+  "installed_wheel": {
+    "distribution": "echidnaxomics",
+    "version": "0.0.4",
+    "console_scripts": [
+      "echidna"
+    ],
+    "python": "3.12.8 (main, Dec  3 2024, 18:42:41) [Clang 16.0.0 (clang-1600.0.26.4)]",
+    "package_path": "/private/tmp/echidnaxomics-wheel-test/lib/python3.12/site-packages/echidna/__init__.py",
+    "cli_checks_passed": [
+      "--help",
+      "--version",
+      "check-chimeras --help",
+      "check-envs --help",
+      "check-read-chimeras --help",
+      "check-ssu-taxonomy --help",
+      "check-zero-coverage --help",
+      "classify-clipping --help",
+      "classify-contigs --help",
+      "fetch-databases --help",
+      "filter-checkm2 --help",
+      "filter-misassemblies --help",
+      "final-report --help",
+      "mag-quality-wf --help",
+      "misassembly-wf --help",
+      "organize-mags --help",
+      "process-large-contigs --help",
+      "remove-hq-contigs --help",
+      "run-anvi-misassemblies --help",
+      "run-checkm2 --help",
+      "run-gtdbtk --help",
+      "run-gunc --help",
+      "run-mimag-rna --help",
+      "run-mmseqs-contigs --help",
+      "setup-workflow --help"
+    ],
+    "source_modules_parsed_with_python38_grammar": 42,
+    "third_party_runtime_imports": []
+  },
+  "build_from_sdist_success": true,
+  "twine_check": "passed for wheel and sdist",
+  "cff_validation": "passed schema 1.2.0",
+  "bioconda_recipe": "template rendered using actual sdist version and SHA256; Jinja rendered and YAML parsed",
+  "bioconda_build_performed": false,
+  "external_tool_environments_resolved": false,
+  "real_database_end_to_end_test_performed": false,
+  "python38_runtime_test_performed": false,
+  "github_ci_run_performed": false,
+  "name_checks": {
+    "https://pypi.org/pypi/echidnaxomics/json": 404,
+    "https://api.anaconda.org/package/bioconda/echidnaxomics": 404,
+    "note": "No record found at check time; no name reservation or guarantee"
+  },
+  "uniop_upstream_dependency_check": {
+    "source": "https://github.com/hongsua/UniOP/blob/main/src/UniOP",
+    "third_party_imports": [
+      "pandas",
+      "numpy",
+      "sklearn (distribution scikit-learn)"
+    ],
+    "external_tool": "Prodigal for nucleotide FASTA input",
+    "upstream_recommended_python": "3.11.5",
+    "integration_added": false,
+    "duplicate_documentation_added": false
+  },
+  "release_metadata_to_complete": [
+    "ORCID",
+    "affiliation",
+    "release version",
+    "release date",
+    "actual DOI after archiving"
+  ]
+}

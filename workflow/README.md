@@ -29,7 +29,7 @@ config, or downloads missing ones with each tool's own downloader.
 
 Or edit by hand: set `genomes_dir`, `genome_ext`, the database paths
 (`gtdbtk_data`, `gunc_db`), `threads`, `sample_regex` / `tax_level` in
-`config.yaml`, and in each `envs/*.yaml` replace `- echidna` with
+`config.yaml`, and in each `envs/*.yaml` replace `- echidnaxomics` with
 `-e /absolute/path/to/this/repo` until Echidna is on PyPI.
 
 ## Run
@@ -75,3 +75,28 @@ workflow starts from a directory of MAG FASTAs.
 | `organized/Selected/{HQ,MQ,LQ}/` | organize-mags (renamed genomes) |
 | `organized/merged_quality.tsv` | organize-mags |
 | `chimera_report.tsv` | check-chimeras |
+
+
+Current scope: the supplied Snakefile does not run MMseqs/classify-contigs, SSU, or final-report. Its chimera verdict uses GUNC alone. Organized MAGs are not automatically excluded by that verdict. MIMAG uses the configured fixed kingdom; mixed domains need separate handling.
+
+
+## Installed distribution and reruns
+
+The distribution is `echidnaxomics`; the command remains `echidna`. Wheels ship
+the templates. Run `echidna setup-workflow --export-workflow ./my-workflow` to
+export a writable copy to a new directory. After publication, exported envs
+install `echidnaxomics`; before publication use `--repo` with the checkout to
+point their pip entries at local source. No new command name is introduced.
+
+Default config is resolved beside the Snakefile, so it can be launched from a
+different working directory. Relative input/output paths still refer to that
+working directory. FASTA inputs are tracked individually, including content
+changes that do not change their parent directory's mtime. Snakemake owns the
+declared tool output directories and `organized/Selected`, and removes them
+before rerunning their producers. Do not keep unrelated files there. Standalone
+`organize-mags` still refuses a populated selection rather than deleting it.
+
+Integration tests execute Snakemake with fixture upstream reports and real
+`organize-mags`/`check-chimeras` commands. They cover RNA on/off, paths with
+spaces, HQ-to-MQ tier changes and reruns after editing an input FASTA; they do
+not execute the expensive scientific tools or their databases.

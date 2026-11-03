@@ -59,7 +59,7 @@ def build_plan(args) -> List[Step]:
 
     if use_readchim:
         rc = ['echidna', 'check-read-chimeras',
-              '--bam', str(args.bam), '-o', str(chimera_dir)]
+              '--bam', str(args.bam), '--assembly', str(args.assembly), '-o', str(chimera_dir)]
         if args.kaiju_output:
             rc += ['--kaiju-output', str(args.kaiju_output)]
             if args.kaiju_names:
