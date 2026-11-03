@@ -13,14 +13,12 @@ tRNAscan-SE, Kraken2, samtools, BLAST+), each in its own conda env.
 
 The distribution name is **`echidnaxomics`**. The command and Python import remain
 **`echidna`**. Install from the checkout below until a release is published;
-`pip install echidna` installs an unrelated project. See the
-[release preparation guide](docs/releasing.md) for DOI and Bioconda steps.
+`pip install echidna` installs an unrelated project.
 
-## Documentation website
+## Documentation
 
-The documentation site is prepared for [GitHub Pages](https://l-gallucci.github.io/echidna/).
-See [activation and maintenance](docs/wiki.md) to enable it and publish manually.
-The site reuses the Markdown guides and `wiki/Home.md`.
+For installation instructions, workflow tutorials, command details and guidance
+on interpreting results, visit the [Echidna documentation](https://l-gallucci.github.io/echidna/).
 
 ## Quickstart
 
@@ -114,26 +112,8 @@ HQ removal and `--hq-list` use exact FASTA contig IDs, not numbers in bin names.
 `organized_tier` alongside the historical CheckM2 `tier`; `--genomes-dir` adds
 explicit circular annotations and a separate near-complete candidate flag.
 
-See the [wiki source](wiki/Home.md), [wiki activation guide](docs/wiki.md), and
-[revalidated fixes](docs/audit-2026-11-03/FIXES.md). Tests cover parser contracts,
-negative controls and simulated process failures. A full biological end-to-end
+Tests cover parser contracts, negative controls and simulated process failures. A full biological end-to-end
 run against installed external databases is still required for your environment.
-
-## Documentation
-
-- [docs/installation.md](docs/installation.md) - install, the one-env-per-tool
-  model, external tools, databases, tests
-- [docs/workflows.md](docs/workflows.md) - the two branches (misassembly cleaning,
-  MAG quality), per-step input/output and file types, with data-flow diagrams
-- [docs/pipeline.md](docs/pipeline.md) - **Quick start** (run everything yourself,
-  copy-paste), run options (standalone, `*-wf` wrappers or Snakemake), complete
-  workflow, step-by-step guide
-- [docs/hpc.md](docs/hpc.md) - running on a SLURM cluster
-- [docs/command-reference.md](docs/command-reference.md) - every flag of every
-  command
-- [docs/references.md](docs/references.md) - citations (Trigodet et al. 2025 for
-  misassemblies, MIMAG, and the driven tools)
-- [workflow/README.md](workflow/README.md) - the Snakemake workflow
 
 ## Citation
 
