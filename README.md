@@ -16,6 +16,12 @@ The distribution name is **`echidnaxomics`**. The command and Python import rema
 `pip install echidna` installs an unrelated project. See the
 [release preparation guide](docs/releasing.md) for DOI and Bioconda steps.
 
+## Documentation website
+
+The documentation site is prepared for [GitHub Pages](https://l-gallucci.github.io/echidna/).
+See [activation and maintenance](docs/wiki.md) to enable it and publish manually.
+The site reuses the Markdown guides and `wiki/Home.md`.
+
 ## Quickstart
 
 ```bash

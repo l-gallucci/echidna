@@ -109,8 +109,9 @@ guide. They and their databases are not bundled in the base package.
 References: [recipe guidelines](https://bioconda.github.io/contributor/guidelines.html),
 [contribution workflow](https://bioconda.github.io/contributor/workflow.html).
 
-## Wiki publication
+## Documentation website
 
-The GitHub Wiki is a separate Git repository. Committing `wiki/Home.md` to the
-code repository does not publish the Wiki. Follow [wiki activation and personal
-commit/push commands](wiki.md); no publishing has been performed here.
+The documentation website is built with MkDocs and prepared for GitHub Pages.
+It imports `wiki/Home.md` as a maintained source. Follow [website activation](wiki.md)
+to select GitHub Actions as the Pages source and publish manually. No website
+has been published here. Documentation publication does not issue a software DOI.

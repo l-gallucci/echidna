@@ -1,0 +1,53 @@
+site_name: Echidna
+site_description: Metagenomic assembly, MAG integrity and chimera screening
+site_url: https://l-gallucci.github.io/echidna/
+repo_url: https://github.com/l-gallucci/echidna
+repo_name: GitHub
+edit_uri: ''
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: readthedocs
+  highlightjs: true
+  navigation_depth: 3
+  collapse_navigation: false
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Workflows: workflows.md
+      - Pipeline tutorial: pipeline.md
+      - Snakemake: snakemake.md
+      - HPC: hpc.md
+  - Command reference: command-reference.md
+  - Interpreting results (IT): guide.md
+  - References: references.md
+  - Project:
+      - Citation and releases: releasing.md
+      - Changelog: changelog.md
+      - Website maintenance: wiki.md
+
+plugins:
+  - search
+hooks:
+  - scripts/docs_hooks.py
+markdown_extensions:
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
+extra_css:
+  - stylesheets/extra.css
+exclude_docs: |
+  /audit-2026-11-03/
+  /img/gen_diagrams.py
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn

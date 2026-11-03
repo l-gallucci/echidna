@@ -1,0 +1,10 @@
+/* Small adjustments to the standard documentation theme. */
+.wy-side-nav-search { background: #175b60; }
+.wy-nav-top { background: #175b60; }
+a { color: #17636a; }
+.wy-menu-vertical a { color: #d9d9d9; }
+.wy-menu-vertical li.current a { color: #404040; }
+.project-logo { display: block; width: 185px; max-width: 65%; height: auto; margin: 0 auto 1.5rem; }
+.wy-nav-content { max-width: 1050px; }
+.rst-content table.docutils { width: 100%; }
+.rst-content pre { overflow-x: auto; }
