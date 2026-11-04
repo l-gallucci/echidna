@@ -82,7 +82,7 @@ Togliere `--dry-run` solo dopo aver predisposto ambienti, input e database. Il p
 
 LQ non viene portato avanti con il default `--tiers HQ,MQ`. Specificare i tier desiderati. Le estensioni vengono inoltrate anche ai passi MIMAG e chimera. I nomi rimangono quelli originali fino all'ultima organizzazione.
 
-I controlli chimera sono **report-only**: un MAG segnalato può comunque comparire nelle cartelle di qualità. Scegliere esplicitamente quali escludere e quali rivedere. `check-ssu-taxonomy` e `final-report` restano comandi separati; il DAG Snakemake fornito non comprende MMseqs/classify-contigs e non equivale al wrapper con tutte le opzioni.
+I controlli chimera sono **report-only**: un MAG segnalato può comunque comparire nelle cartelle di qualità. Scegliere esplicitamente quali escludere e quali rivedere. `check-ssu-taxonomy` e `final-report` restano comandi separati. Il DAG Snakemake può riusare una tabella tassonomica per contig tramite `classify-contigs`, ma non esegue la classificazione MMseqs iniziale.
 
 ## Contig condivisi fra MAG
 
@@ -96,9 +96,48 @@ echidna check-shared-contigs --bins-dir bins/ --output-dir overlap/
 Per cartelle HQ/MQ/LQ annidate aggiungere `--recursive`. Si possono passare più
 cartelle dopo `--bins-dir`. I report distinguono sequenze condivise e ID uguali
 associati a sequenze differenti; includono coppie di MAG e frazioni condivise.
-Non vengono modificati FASTA, assegnazioni o verdetti chimera. L'identità di una
+Nel comportamento predefinito non vengono modificati FASTA, assegnazioni o verdetti chimera. L'identità di una
 sequenza può dipendere da elementi ripetuti: non è, da sola, prova di contaminazione.
-[Dettagli e limiti del confronto](../docs/shared-contigs.md).
+Il comportamento predefinito è report-only. Con `--quality-report` si possono usare
+`--exclude-mags` oppure `--remove-shared-contigs`: i risultati risolti vanno in
+`retained/`, con esclusi e contig rimossi salvati separatamente. La priorità è
+completezza decrescente, poi contaminazione crescente. `--rank-by quality-score`
+usa invece completezza meno cinque volte la contaminazione.
+
+Con `--drep-dir` (oppure `--cluster-table`) e `--candidates-dir` vengono cercati
+sostituti dello stesso cluster. Ogni candidato è verificato contro tutto il set
+mantenuto e il set finale viene ricontrollato. I MAG privati di contig hanno
+qualità finale non valutata e richiedono CheckM2; i sostituti richiedono i propri
+controlli a valle. Gli originali rimangono invariati.
+[Dettagli e limiti del confronto e della risoluzione](../docs/shared-contigs.md).
+
+### Recupero dai cluster con verifica tassonomica
+
+`check-shared-contigs --contig-taxonomy <classify-contigs.tsv>` verifica anche
+la coerenza interna dei MAG conservati e dei candidati recuperati. La tabella
+deve essere quella **per contig**, con impronta della sequenza, lunghezza e rango,
+non il riepilogo `.bins.tsv`. I candidati vengono accettati solo se non
+condividono contig con gli altri MAG conservati e superano la verifica tassonomica.
+Se un candidato fallisce, viene provato il successivo. Non vengono costruiti
+MAG ibridi tramite unioni di contig di genomi diversi.
+
+Per impostazione iniziale almeno il 50% delle basi del MAG deve avere un taxon
+risolto al rango scelto; la frazione minoritaria deve essere inferiore al 5%
+delle basi risolte. Le soglie sono configurabili. Evidenza insufficiente non
+equivale a coerenza. Il confronto per sequenza consente il riuso anche dopo
+rinomina o reverse complement; assegnazioni contraddittorie diventano irrisolte.
+
+Il workflow `mag-quality-wf --resolve-overlaps exclude-mags` (oppure
+`remove-contigs`) esegue questa selezione prima di CheckM2, GTDB-Tk, GUNC e RNA.
+Richiede `--quality-report` per l'ordinamento e `--contig-taxonomy` per la verifica;
+con `--drep-dir`/`--cluster-table` e `--candidates-dir` abilita le sostituzioni.
+La tassonomia dei bin finali viene riaggregata dalle assegnazioni per contig,
+senza rilanciare il classificatore. Il DAG Snakemake offre lo stesso passaggio
+opzionale con le chiavi `overlap_*` in config.yaml.
+
+Gli output precedenti privi di impronta si rigenerano rilanciando soltanto
+`classify-contigs` sul vecchio output grezzo del classificatore e sui FASTA
+originali corrispondenti. [Procedura e workflow](../docs/workflows.md#overlap-resolution-with-existing-contig-taxonomy).
 
 ## Database concordanti e confronto delle reads
 

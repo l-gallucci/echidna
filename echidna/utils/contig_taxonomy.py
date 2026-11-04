@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .fasta import read_fasta_streaming
+from .bin_overlap import discover_bins, read_bin, sequence_digest
 from .logging import log_info, log_warning
 
 
@@ -201,6 +202,41 @@ def assign_contigs_to_bins(bins_dir: Path,
     log_info(f"Mapped {sum(len(c) for c in bins.values()):,} contigs "
              f"across {len(bins):,} bins")
     return bins
+
+
+def collect_bin_evidence(bins_dir, extensions, scoped=False):
+    """Read strict FASTAs once, rejecting ambiguous genome or contig names.
+
+    A shared ID is safe only when its canonical full sequence is identical.
+    This is essential when reusing a classifier output keyed by contig ID.
+    """
+    bins, lengths, digests = {}, {}, {}
+    for label, path in discover_bins([bins_dir], recursive=True, extensions=','.join(extensions)).items():
+        name = path.name
+        for suffix in ('.gzip', '.gz'):
+            if name.lower().endswith(suffix):
+                name = name[:-len(suffix)]
+                break
+        name = Path(name).stem
+        if name in bins:
+            raise ValueError(f'Duplicate genome basename {name}; use unique filenames before classifying contigs')
+        contigs = []
+        for contig, seq in read_bin(path):
+            digest = sequence_digest(seq)
+            key = (name, contig) if scoped else contig
+            if key in digests and digests[key] != digest:
+                raise ValueError(f'Contig ID {contig} has different sequences across MAGs; '
+                                 'classify each assembly separately or use globally unique IDs')
+            digests[key], lengths[key] = digest, len(seq)
+            contigs.append(contig)
+        bins[name] = contigs
+    return bins, lengths, digests
+
+
+def summarize_bin_assignments(bin_contigs, contig_taxa, target_rank, contig_len):
+    """Aggregate already rank-resolved assignments for the current bin membership."""
+    return _summarize_bins(bin_contigs, contig_taxa, lambda taxon: taxon, target_rank,
+                           contig_len=contig_len)
 
 
 def collect_contig_lengths(bins_dir: Path,

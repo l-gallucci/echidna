@@ -15,13 +15,17 @@ if command not in ('run-checkm2', 'run-gtdbtk', 'run-gunc', 'run-mimag-rna'):
 
 
 def arg(name):
+    if name == '--output' and name not in args:
+        name = '-o'
     return args[args.index(name) + 1]
 
 
 out = Path(arg('--output'))
 out.mkdir(parents=True, exist_ok=True)
 ext = arg('--extension') if '--extension' in args else arg('--file-suffix').lstrip('.')
-names = sorted(p.stem for p in Path(arg('--genome-dir')).glob('*.' + ext))
+selected = '--selected-dir' in args
+genomes = Path(arg('--selected-dir' if selected else '--genome-dir'))
+names = sorted(p.stem for p in (genomes.rglob('*.' + ext) if selected else genomes.glob('*.' + ext)))
 
 
 def table(name, fields, rows):

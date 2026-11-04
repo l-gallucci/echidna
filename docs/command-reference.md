@@ -49,8 +49,8 @@ Optional:
 
 Report exact full-length contig sequences shared by MAGs, including renamed
 contigs and reverse complements. Same-ID/different-sequence conflicts are
-reported separately. No database or external tool is needed; inputs are not
-modified. This is a standalone check, outside the existing workflow wrappers.
+reported separately. The default is report-only; original inputs are always
+read-only. This standalone command is outside the existing workflow wrappers.
 
 ```bash
 echidna check-shared-contigs --bins-dir bins/ -o overlap/
@@ -65,6 +65,24 @@ Optional: `--recursive` and `--extensions fa,fna,fasta`; gzip is recognized.
 Reports: `shared_contigs.tsv`, `id_conflicts.tsv`, `bin_pairs.tsv`,
 `bin_summary.tsv` and `summary.json`. See [shared-contig definitions and report
 columns](shared-contigs.md). Partial alignments and ANI are not assessed.
+
+Optional resolution: choose `--exclude-mags` or `--remove-shared-contigs` and
+supply `--quality-report`. Priority is completeness, then lower contamination;
+`--rank-by quality-score` uses completeness minus five times contamination.
+For same-cluster alternatives add `--candidates-dir` and either `--drep-dir`
+or `--cluster-table`. Candidates and final exported FASTAs are checked against
+the entire retained set. Trimmed MAG quality is marked as requiring reassessment.
+See the [resolution workflow and output definitions](shared-contigs.md#resolve-overlaps-by-quality).
+
+Add `--contig-taxonomy <classify-contigs.tsv>` (the per-contig sequence-linked
+table, not `.bins.tsv`) to require taxonomic coherence for every retained MAG
+and replacement. `--taxonomy-rank` asserts the table's rank;
+`--min-taxonomy-resolved-frac` defaults to 0.5 of all bases and
+`--min-foreign-frac` to 0.05 of resolved bases. Missing/ambiguous taxonomy does
+not pass as coherent. `taxonomy_checks.tsv` records evaluations and exported
+FASTA rechecks. `--require-retained` returns a nonzero exit code after saving
+complete reports if selection leaves no MAGs. See
+[taxonomy reuse and acceptance rules](shared-contigs.md#reuse-contig-taxonomy-when-selecting-replacements).
 
 ## check-chimeras
 
@@ -151,6 +169,8 @@ Required:
     --mmseqs-output PATH      MMseqs2 taxonomy TSV (run-mmseqs-contigs); GTDB-capable
     --kraken2-output PATH     Kraken2 per-contig output (nucleotide, DB-biased)
     --kaiju-output PATH       Kaiju per-contig output (protein, more sensitive)
+    --taxonomy-table PATH     Reuse a sequence-linked classify-contigs TSV on
+                              current bin membership; no classifier rerun
 
 Optional:
   --nodes-dmp PATH            NCBI nodes.dmp - required for Kraken2/Kaiju and for an
@@ -169,7 +189,10 @@ Optional:
   --dry-run
 ```
 
-Per-contig columns: `contig`, `bin`, `contig_taxid`, `rank_taxon`, `is_foreign`.
+Per-contig columns: `contig`, `bin`, `contig_taxid`, `rank_taxon`, `is_foreign`,
+`sequence_sha256`, `contig_length`, `taxonomy_rank`. Fingerprints allow safe
+reuse for renamed contigs and changed bins, without transferring old per-bin
+fractions. Raw ID-based classifier inputs require unambiguous contig IDs.
 Per-bin columns: `bin`, `n_contigs`, `n_contigs_resolved`, `n_taxa`,
 `majority_taxon`, `chimera_flag`, `foreign_frac`, `n_foreign_contigs`,
 `foreign_contigs`, `taxa`. The majority taxon and `foreign_frac` are weighted by
@@ -632,9 +655,12 @@ Runs the whole MAG quality + taxonomy branch from a bin set, each step in the
 right env. Steps: `checkm2` -> `organize1` -> `gtdbtk` -> `gunc` ->
 `[mmseqs -> contigtax]` -> `mimag` -> `chimeras` -> `organize2`. Genome names are
 frozen after `organize1` so GUNC, check-chimeras and run-mimag-rna match. The
-`mmseqs` + `contigtax` steps run only when `--mmseqs-db` is given; they add the
+`mmseqs` + `contigtax` steps run when `--mmseqs-db` is given; they add the
 per-contig taxonomy signal so `check-chimeras` can return a real `Chimeric`
-verdict (both signals). Without `--mmseqs-db` the verdict rests on GUNC alone.
+verdict (both signals). Alternatively, `--contig-taxonomy` reuses sequence-linked
+assignments and runs only `contigtax`. Without either source the verdict rests
+on GUNC alone. Optional `overlap` runs first and all subsequent QC uses the
+resolved FASTAs, including fresh CheckM2 estimates.
 
 ```
 Required:
@@ -653,12 +679,27 @@ Optional:
   --checkm2-db PATH           CheckM2 .dmnd (else CheckM2 default)
   --mmseqs-db PREFIX          MMseqs2 taxonomy DB prefix; adds the mmseqs + contigtax
                               steps and the per-contig chimera signal (omit = GUNC-only)
+  --contig-taxonomy PATH      Sequence-linked per-contig classify-contigs TSV;
+                              alternative to --mmseqs-db, not a .bins.tsv summary
+  --taxonomy-rank STR         Rank of reused assignments / classify-contigs (default: order)
+  --min-foreign-frac FLOAT    Foreign/resolved-base threshold (default: 0.05)
+  --resolve-overlaps MODE     exclude-mags | remove-contigs; adds overlap before QC
+  --quality-report PATH       Prior ranking quality for representatives and alternatives;
+                              required with --resolve-overlaps, as is --contig-taxonomy
+  --rank-by STR               completeness (default) | quality-score
+  --drep-dir / --cluster-table PATH     Cluster metadata (mutually exclusive)
+  --candidates-dir PATH [...] Original alternative MAG FASTAs; supply with cluster metadata
+  --min-taxonomy-resolved-frac FLOAT    Resolved/all-base minimum for selection (default: 0.5)
   --split-by-domain           run-mimag-rna picks bac/arc per genome from GTDB-Tk
   --skip-mimag                Skip the rRNA/tRNA MIMAG HQ gate
   --from STEP                 Resume at a step
   --skip STEP[,STEP]          Skip steps
   --dry-run                   Print commands without running
 ```
+
+See the [ordered resolution and QC workflow](workflows.md#overlap-resolution-with-existing-contig-taxonomy).
+`setup-workflow` accepts these reuse/selection flags too and records their
+Snakemake config equivalents; no external tools run unless `--install` is given.
 
 ## final-report
 

@@ -10,6 +10,24 @@
 genomes_dir: "bins"
 genome_ext: "fa"            # extension without the dot
 
+# Optional reused per-contig classifications from classify-contigs (NOT .bins.tsv).
+# Contains sequence_sha256, contig_length, taxonomy_rank and rank_taxon.
+# Reaggregate old classifier output with classify-contigs to add fingerprints.
+contig_taxonomy: ""
+taxonomy_rank: "order"       # must match the table's rank
+min_foreign_frac: 0.05      # minority fraction of resolved bases, same as check-chimeras
+min_taxonomy_resolved_frac: 0.5  # resolved bases / all MAG bases; overlap acceptance gate
+
+# Optional selection BEFORE all final quality/taxonomy/RNA/chimera checks.
+# Blank preserves the original workflow. Modes: exclude-mags | remove-contigs.
+# Both quality and sequence-linked contig_taxonomy tables are required.
+overlap_resolution: ""
+overlap_quality_report: ""  # prior quality for representatives AND alternatives
+overlap_rank_by: "completeness"
+overlap_drep_dir: ""        # reads data_tables/Cdb.csv secondary clusters
+overlap_cluster_table: ""   # alternative to overlap_drep_dir: genome,cluster TSV/CSV
+overlap_candidates_dirs: [] # original pre-dereplication FASTAs, e.g. ["all_mags"]
+
 # Output root
 outdir: "results"
 

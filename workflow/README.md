@@ -77,7 +77,42 @@ workflow starts from a directory of MAG FASTAs.
 | `chimera_report.tsv` | check-chimeras |
 
 
-Current scope: the supplied Snakefile does not run MMseqs/classify-contigs, SSU, or final-report. Its chimera verdict uses GUNC alone. Organized MAGs are not automatically excluded by that verdict. MIMAG uses the configured fixed kingdom; mixed domains need separate handling.
+Current scope: the supplied Snakefile can reuse a sequence-linked per-contig
+taxonomy table through `classify-contigs`; it does not generate raw MMseqs
+classifications, run SSU checks or final-report. Without the optional table its
+chimera verdict uses GUNC alone. Organized MAGs are not automatically excluded
+by that verdict. MIMAG uses the configured fixed kingdom; mixed domains need
+separate handling.
+
+## Optional overlap resolution and taxonomy reuse
+
+```bash
+echidna setup-workflow --genomes-dir drep/dereplicated_genomes/ \
+  --resolve-overlaps exclude-mags --quality-report checkm2_all/quality_report.tsv \
+  --contig-taxonomy all_contigs.classified.tsv --taxonomy-rank order \
+  --drep-dir drep/ --candidates-dir all_original_mags/
+```
+
+Selection uses existing completeness/contamination for ranking, tests each
+candidate against every retained MAG for shared full contigs, and requires
+sufficient taxonomic evidence and coherence. It writes under
+`<outdir>/overlap_resolution/`. All downstream CheckM2, GTDB-Tk, GUNC and optional
+RNA analyses run on the resolved `.fa` collection. Bin-level taxonomy fractions
+are recalculated from the per-contig evidence for those genomes.
+
+Set `overlap_resolution` to `remove-contigs` for shared-copy removal, or blank
+to disable selection. `overlap_cluster_table` can replace `overlap_drep_dir` for
+other tools. `min_taxonomy_resolved_frac` defaults to 0.5 of all MAG bases and
+`min_foreign_frac` to 0.05 of resolved bases. The latter threshold is also passed
+to check-chimeras. A checkpoint tracks changed representatives, candidates and
+tables and discovers the resulting FASTA names before scheduling downstream QC.
+If no MAG passes, inspect the selection reports; downstream jobs stop.
+
+`contig_taxonomy` alone can also enable the second chimera signal without any
+overlap selection. Use the per-contig `classify-contigs` table with sequence
+fingerprints, **not `.bins.tsv`**. Older tables can be regenerated from existing
+classifier output without rerunning the classifier. See
+[taxonomy reuse](../docs/shared-contigs.md#reuse-contig-taxonomy-when-selecting-replacements).
 
 
 ## Installed distribution and reruns

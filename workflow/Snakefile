@@ -6,14 +6,32 @@ from pathlib import Path
 
 configfile: os.path.join(workflow.basedir, "config.yaml")
 
-GENOMES = str(config["genomes_dir"])
-EXT = str(config["genome_ext"]).lstrip(".")
+SOURCE_GENOMES = str(config["genomes_dir"])
+SOURCE_EXT = str(config["genome_ext"]).lstrip(".")
 OUT = str(config["outdir"])
 THREADS = int(config["threads"])
+OVERLAP_MODE = config.get("overlap_resolution", "") or ""
+CONTIG_TAXONOMY = str(config.get("contig_taxonomy", "") or "")
+TAXONOMY_RANK = str(config.get("taxonomy_rank", "order"))
+MIN_FOREIGN = float(config.get("min_foreign_frac", 0.05))
+CANDIDATE_ROOTS = config.get("overlap_candidates_dirs", []) or []
+if not isinstance(CANDIDATE_ROOTS, list):
+    raise ValueError('overlap_candidates_dirs must be a YAML list, e.g. ["all_mags"]')
+if OVERLAP_MODE not in ("", "exclude-mags", "remove-contigs"):
+    raise ValueError("overlap_resolution must be blank, exclude-mags or remove-contigs")
+if OVERLAP_MODE and (not CONTIG_TAXONOMY or not config.get("overlap_quality_report")):
+    raise ValueError("Overlap resolution requires contig_taxonomy and overlap_quality_report")
+GENOMES = f"{OUT}/overlap_resolution/retained" if OVERLAP_MODE else SOURCE_GENOMES
+EXT = "fa" if OVERLAP_MODE else SOURCE_EXT
 # Track individual FASTAs: editing a file need not update its parent directory.
-GENOME_FILES = sorted(str(p) for p in Path(GENOMES).glob(f"*.{EXT}") if p.is_file())
-if not GENOME_FILES:
-    raise ValueError(f"No genomes matching *.{EXT} in {GENOMES}")
+SOURCE_FILES = sorted(str(p) for p in Path(SOURCE_GENOMES).glob(f"*.{SOURCE_EXT}") if p.is_file())
+if OVERLAP_MODE:
+    SOURCE_FILES = sorted(str(p) for p in Path(SOURCE_GENOMES).rglob("*")
+                          if p.is_file() and p.name.lower().endswith(
+                              ("." + SOURCE_EXT.lower(), "." + SOURCE_EXT.lower() + ".gz",
+                               "." + SOURCE_EXT.lower() + ".gzip")))
+if not SOURCE_FILES:
+    raise ValueError(f"No genomes matching *.{SOURCE_EXT} in {SOURCE_GENOMES}")
 if THREADS < 1:
     raise ValueError("threads must be positive")
 
@@ -30,6 +48,45 @@ def pre(role):
     return "conda run -n " + shlex.quote(name) + " " if USE_NAMED and name else ""
 
 
+def genome_inputs(_):
+    if not OVERLAP_MODE:
+        return SOURCE_FILES
+    resolved = checkpoints.resolve_overlaps.get().output.outdir
+    files = sorted(str(p) for p in (Path(resolved) / "retained").glob("*.fa"))
+    if not files:
+        raise ValueError("No MAGs passed overlap/taxonomy selection; inspect overlap_resolution reports")
+    return files
+
+
+def overlap_inputs(_):
+    members = [p for root in CANDIDATE_ROOTS for p in Path(root).rglob("*")
+               if p.is_file() and p.name.lower().endswith(
+                   ("." + SOURCE_EXT.lower(), "." + SOURCE_EXT.lower() + ".gz",
+                    "." + SOURCE_EXT.lower() + ".gzip"))]
+    cluster = config.get("overlap_cluster_table") or (
+        str(Path(config["overlap_drep_dir"]) / "data_tables/Cdb.csv") if config.get("overlap_drep_dir") else "")
+    return SOURCE_FILES + sorted(set(str(p) for p in members)) + [
+        str(config["overlap_quality_report"]), CONTIG_TAXONOMY] + ([str(cluster)] if cluster else [])
+
+
+def overlap_args():
+    args = ["--bins-dir", SOURCE_GENOMES, "--recursive", "--extensions", SOURCE_EXT,
+            "--exclude-mags" if OVERLAP_MODE == "exclude-mags" else "--remove-shared-contigs",
+            "--quality-report", str(config["overlap_quality_report"]),
+            "--contig-taxonomy", CONTIG_TAXONOMY, "--taxonomy-rank", TAXONOMY_RANK,
+            "--min-taxonomy-resolved-frac", str(config.get("min_taxonomy_resolved_frac", 0.5)),
+            "--min-foreign-frac", str(MIN_FOREIGN),
+            "--rank-by", str(config.get("overlap_rank_by", "completeness"))]
+    if config.get("overlap_drep_dir") and config.get("overlap_cluster_table"):
+        raise ValueError("Use overlap_drep_dir OR overlap_cluster_table")
+    for flag, key in (("--drep-dir", "overlap_drep_dir"), ("--cluster-table", "overlap_cluster_table")):
+        if config.get(key):
+            args += [flag, str(config[key])]
+    if CANDIDATE_ROOTS:
+        args += ["--candidates-dir"] + [str(p) for p in CANDIDATE_ROOTS]
+    return " ".join(shlex.quote(arg) for arg in args)
+
+
 rule all:
     input:
         f"{OUT}/chimera_report.tsv",
@@ -42,9 +99,24 @@ rule all_mag_quality:
         rules.all.input
 
 
+if OVERLAP_MODE:
+    checkpoint resolve_overlaps:
+        input:
+            overlap_inputs,
+        output:
+            outdir=directory(f"{OUT}/overlap_resolution"),
+        params:
+            pre=pre("echidna"),
+            args=overlap_args(),
+        conda:
+            "envs/echidna.yaml"
+        shell:
+            "{params.pre}echidna check-shared-contigs {params.args} -o {output.outdir:q}"
+
+
 rule run_checkm2:
     input:
-        genomes=GENOME_FILES,
+        genomes=genome_inputs,
     output:
         outdir=directory(f"{OUT}/checkm2"),
     params:
@@ -60,7 +132,7 @@ rule run_checkm2:
 
 rule run_gtdbtk:
     input:
-        genomes=GENOME_FILES,
+        genomes=genome_inputs,
     output:
         outdir=directory(f"{OUT}/gtdbtk"),
     params:
@@ -77,7 +149,7 @@ rule run_gtdbtk:
 
 rule run_gunc:
     input:
-        genomes=GENOME_FILES,
+        genomes=genome_inputs,
     output:
         outdir=directory(f"{OUT}/gunc"),
     params:
@@ -92,7 +164,7 @@ rule run_gunc:
 
 rule run_mimag_rna:
     input:
-        genomes=GENOME_FILES,
+        genomes=genome_inputs,
     output:
         outdir=directory(f"{OUT}/mimag_rna"),
     params:
@@ -105,17 +177,12 @@ rule run_mimag_rna:
         "--extension {EXT:q} --kingdom {MIMAG_KING:q} --threads {threads}"
 
 
-def organize_inputs(_):
-    inputs = {"checkm2": f"{OUT}/checkm2", "gtdbtk": f"{OUT}/gtdbtk",
-              "genomes": GENOME_FILES}
-    if MIMAG_RNA:
-        inputs["mimag"] = f"{OUT}/mimag_rna"
-    return inputs
-
-
 rule organize_mags:
     input:
-        unpack(organize_inputs),
+        checkm2=f"{OUT}/checkm2",
+        gtdbtk=f"{OUT}/gtdbtk",
+        genomes=genome_inputs,
+        mimag=([f"{OUT}/mimag_rna"] if MIMAG_RNA else []),
     output:
         merged=f"{OUT}/organized/merged_quality.tsv",
         # Snakemake must remove old tier copies when it reruns this rule.
@@ -134,20 +201,41 @@ rule organize_mags:
         "--extensions {EXT:q} {params.mimag}"
 
 
+if CONTIG_TAXONOMY:
+    rule classify_contigs:
+        input:
+            genomes=genome_inputs,
+            taxonomy=CONTIG_TAXONOMY,
+        output:
+            contigs=f"{OUT}/contig_taxonomy.tsv",
+            bins=f"{OUT}/contig_taxonomy.tsv.bins.tsv",
+        params:
+            pre=pre("echidna"),
+        conda:
+            "envs/echidna.yaml"
+        shell:
+            "{params.pre}echidna classify-contigs --bins-dir {GENOMES:q} "
+            "--taxonomy-table {input.taxonomy:q} --rank {TAXONOMY_RANK:q} "
+            "--min-foreign-frac {MIN_FOREIGN} --extensions {EXT:q} -o {output.contigs:q}"
+
+
 rule check_chimeras:
     input:
         checkm2=f"{OUT}/checkm2",
         gtdbtk=f"{OUT}/gtdbtk",
         gunc=f"{OUT}/gunc",
-        genomes=GENOME_FILES,
+        genomes=genome_inputs,
+        contigtax=([f"{OUT}/contig_taxonomy.tsv.bins.tsv"] if CONTIG_TAXONOMY else []),
     output:
         report=f"{OUT}/chimera_report.tsv",
     params:
         pre=pre("echidna"),
         report=f"{OUT}/checkm2/quality_report.tsv",
+        contigtax=("--contig-taxonomy " + shlex.quote(f"{OUT}/contig_taxonomy.tsv.bins.tsv") +
+                   " --min-foreign-frac " + str(MIN_FOREIGN)) if CONTIG_TAXONOMY else "",
     conda:
         "envs/echidna.yaml"
     shell:
         "{params.pre}echidna check-chimeras --bins-dir {GENOMES:q} --output {output.report:q} "
         "--gtdbtk-dir {input.gtdbtk:q} --checkm2-report {params.report:q} "
-        "--gunc-dir {input.gunc:q} --extensions {EXT:q}"
+        "--gunc-dir {input.gunc:q} --extensions {EXT:q} {params.contigtax}"

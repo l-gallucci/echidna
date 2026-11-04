@@ -212,6 +212,17 @@ def test_measured_clean_signal_stays_clean(tmp_path):
     assert assess_chimera_verdict(True, True)[0] == 'Chimeric'
 
 
+def test_zero_foreign_threshold_does_not_flag_a_single_taxon(tmp_path):
+    bins = tmp_path / 'bins'
+    bins.mkdir()
+    (bins / 'x.fa').write_text('>c\nACGT\n')
+    source = tmp_path / 'ct.tsv'
+    source.write_text('bin\tforeign_frac\tn_contigs_resolved\nx\t0\t1\n')
+    result = check_chimeras.run_chimera_check(bins, tmp_path / 'report.tsv', ['fa'], None,
+             None, None, source, 0, 5000, .1, 'phylum', [], False)
+    assert result['verdict']['Clean'] == 1
+
+
 @pytest.mark.parametrize('value', ['bad', 'nan', '-1', '1.1'])
 def test_invalid_taxonomy_fraction_fails(tmp_path, value):
     p = tmp_path / 'ct.tsv'

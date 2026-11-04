@@ -94,3 +94,29 @@ def test_export_dry_run_does_not_write(tmp_path, monkeypatch):
     dest = tmp_path / 'exported'
     sw.run(parser.parse_args(['setup-workflow', '--export-workflow', str(dest), '--dry-run']))
     assert not dest.exists()
+
+
+def test_setup_records_taxonomy_reuse_and_cluster_fallback(tmp_path, monkeypatch):
+    import argparse
+    import json
+    from echidna.commands import setup_workflow as sw
+    package = tmp_path / 'site-packages' / 'echidna'
+    templates = package / 'workflow_templates'
+    (templates / 'envs').mkdir(parents=True)
+    (templates / 'config.yaml').write_text('threads: 1\noverlap_cluster_table: "old.tsv"\n')
+    (templates / 'Snakefile').write_text('# fixture\n')
+    monkeypatch.setattr(sw, 'PACKAGE_ROOT', package)
+    parser = argparse.ArgumentParser()
+    sw.register_parser(parser.add_subparsers())
+    dest = tmp_path / 'exported'
+    sw.run(parser.parse_args(['setup-workflow', '--export-workflow', str(dest),
+           '--resolve-overlaps', 'exclude-mags', '--quality-report', 'all_quality.tsv',
+           '--contig-taxonomy', 'all_tax.tsv', '--taxonomy-rank', 'class', '--drep-dir', 'drep',
+           '--candidates-dir', 'MAGs one', 'MAGs two', '--min-taxonomy-resolved-frac', '0.8']))
+    text = (dest / 'config.yaml').read_text()
+    assert 'overlap_cluster_table: ""' in text
+    assert 'overlap_resolution: "exclude-mags"' in text
+    assert 'contig_taxonomy: "all_tax.tsv"' in text
+    assert 'min_taxonomy_resolved_frac: 0.8' in text
+    line = next(line for line in text.splitlines() if line.startswith('overlap_candidates_dirs:'))
+    assert json.loads(line.partition(':')[2]) == ['MAGs one', 'MAGs two']

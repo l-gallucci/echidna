@@ -29,7 +29,8 @@ import argparse
 from pathlib import Path
 from typing import List, Tuple
 
-from ..utils.fasta import read_fasta_streaming, write_fasta
+from ..utils.fasta import write_fasta
+from ..utils.bin_overlap import discover_bins, read_bin, sequence_digest
 from ..utils.validation import check_dependencies, validate_dir_exists, validate_file_exists
 from ..utils.logging import log_info, log_error, log_warning, print_header, print_section
 
@@ -47,22 +48,25 @@ def check_mmseqs(exe: str = MMSEQS_EXE) -> bool:
 
 
 def concat_bins(bins_dir: Path, extensions: List[str], out_fasta: Path) -> int:
-    """Write every contig of every bin into one FASTA. Returns contig count.
-
-    Contig headers are kept verbatim so classify-contigs can map them back to
-    their bins; a name shared by two bins would collide here (rare for MAGs).
-    """
+    """Classify identical shared IDs once; reject same-ID/different-sequence input."""
+    count = 0
     def records():
-        bin_files: List[Path] = []
-        for ext in extensions:
-            bin_files.extend(bins_dir.rglob(f"*.{ext}"))
-        for bin_file in sorted(set(bin_files)):
-            for name, seq in read_fasta_streaming(bin_file):
+        nonlocal count
+        seen = {}
+        for bin_file in discover_bins([bins_dir], recursive=True, extensions=','.join(extensions)).values():
+            for name, seq in read_bin(bin_file):
+                digest = sequence_digest(seq)
+                if name in seen:
+                    if seen[name] != digest:
+                        raise ValueError(f'Contig ID {name} has different sequences across MAGs; '
+                                         'classify assemblies separately or use globally unique IDs')
+                    continue
+                seen[name] = digest
+                count += 1
                 yield name, seq
 
-    recs = list(records())
-    write_fasta(recs, out_fasta)
-    return len(recs)
+    write_fasta(records(), out_fasta)
+    return count
 
 
 def build_commands(exe: str, query_fasta: Path, seq_tax_db: Path,

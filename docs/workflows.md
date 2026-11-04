@@ -101,8 +101,10 @@ printed by `--dry-run` and listed in [command-reference.md](command-reference.md
 check-chimeras and run-mimag-rna all match (no rename until the final step). Pass
 `--mmseqs-db <prefix>` to add the per-contig taxonomy signal (it inserts
 `run-mmseqs-contigs` + `classify-contigs` and feeds check-chimeras
-`--contig-taxonomy`, so a bin can reach a real `Chimeric` verdict); without it the
-verdict rests on GUNC alone.
+`--contig-taxonomy`, so a bin can reach a real `Chimeric` verdict). Alternatively,
+provide `--contig-taxonomy <classify-contigs.tsv>` to reuse existing sequence-linked
+assignments and regenerate the bin summaries. Without either source the verdict
+rests on GUNC alone.
 
 The `*-wf` commands shell out to `conda run -n <env> ...`, so the tool envs must
 exist and have Echidna installed (including the anvi'o env, for
@@ -142,5 +144,76 @@ Before interpreting a combined MAG collection, run
 subfolders add `--recursive`; multiple input directories can be supplied after
 `--bins-dir`. The standalone command reports identical complete sequences
 (including renamed contigs and reverse complements) and ID conflicts separately.
-It does not change bin membership or the workflow's chimera verdict.
-See [reports and examples](shared-contigs.md).
+By default it reports overlap without changing membership or chimera verdicts.
+Optional `--exclude-mags` or `--remove-shared-contigs`, with `--quality-report`,
+export a separate resolved collection. Cluster-aware replacements are available
+with candidate FASTAs and dRep/generic cluster metadata. Trimmed MAGs require
+quality reassessment. See [reports, resolution and examples](shared-contigs.md).
+
+## Overlap resolution with existing contig taxonomy
+
+The two MAG workflows can resolve a representative set **before** running final
+QC. Supply previous quality estimates for ranking and sequence-linked per-contig
+classifications covering representatives and candidate MAGs:
+
+```bash
+echidna mag-quality-wf --bins-dir drep/dereplicated_genomes/ -o mag_wf/ \
+  --resolve-overlaps exclude-mags \
+  --quality-report checkm2_all/quality_report.tsv \
+  --contig-taxonomy all_contigs.classified.tsv --taxonomy-rank order \
+  --drep-dir drep/ --candidates-dir all_original_mags/ \
+  --gtdbtk-data /data/gtdbtk --gunc-db /data/gunc/gunc.dmnd \
+  --threads 20
+```
+
+Use `--resolve-overlaps remove-contigs` for shared-copy removal. For other
+dereplication tools replace `--drep-dir` with `--cluster-table clusters.tsv`.
+The same FASTA extension is used for starting representatives and candidates;
+resolved outputs use `.fa` and downstream commands receive that extension.
+
+The order is:
+
+1. Resolve overlap and test taxonomy before accepting each genome or substitute.
+2. Check the actual exported FASTAs for overlap and taxonomy again.
+3. Run CheckM2 on the resolved collection, then tier it with original filenames.
+4. Run GTDB-Tk, GUNC and optional MIMAG RNA on the selected genomes.
+5. Reaggregate the reused contig assignments on the selected genomes and feed
+   the **new** per-bin summary to `check-chimeras` alongside the new GUNC report.
+6. Organize final MAGs using the new QC results. The chimera verdict remains
+   report-only; it is distinct from the explicit taxonomy acceptance gate.
+
+No previous representative's bin-level taxonomy, GUNC or quality result is
+copied onto a replacement. This workflow reuses classifier assignments, not
+old bin statistics. Initial thresholds are `0.5` resolved/all-base fraction and
+`0.05` foreign/resolved-base fraction; change them with
+`--min-taxonomy-resolved-frac` and `--min-foreign-frac`. See the
+[precise acceptance rules and legacy-table migration](shared-contigs.md#reuse-contig-taxonomy-when-selecting-replacements).
+
+`mag-quality-wf` writes selection outputs under `00_overlap/`; other step names
+are unchanged. Resume later steps with `--from checkm2` etc. Selection output
+must be new or empty, so rerunning `overlap` into a nonempty directory is refused;
+use a new output root or explicitly manage previous results. Omitting
+`--resolve-overlaps` preserves the original workflow.
+
+For Snakemake, the equivalent configuration is:
+
+```yaml
+genomes_dir: "drep/dereplicated_genomes"
+genome_ext: "fa"
+overlap_resolution: "exclude-mags"
+overlap_quality_report: "checkm2_all/quality_report.tsv"
+overlap_drep_dir: "drep"
+overlap_candidates_dirs: ["all_original_mags"]
+contig_taxonomy: "all_contigs.classified.tsv"
+taxonomy_rank: "order"
+min_taxonomy_resolved_frac: 0.5
+min_foreign_frac: 0.05
+```
+
+`setup-workflow` accepts the same selection flags as the command example to
+write those settings. Snakemake uses a checkpoint because replacement names
+and counts are unknown before selection. It tracks representative/candidate
+FASTA files and metadata tables, then rebuilds downstream QC if selection
+changes. Its resolved collection is under `overlap_resolution/retained/`.
+Without overlap resolution, `contig_taxonomy` can still enable the second
+chimera signal by reaggregating existing classifications on the original bins.

@@ -35,21 +35,23 @@ from ..utils.contig_taxonomy import (
     parse_nodes_dmp,
     parse_mmseqs_taxonomy,
     parse_mmseqs_lineage,
-    assign_contigs_to_bins,
-    collect_contig_lengths,
+    collect_bin_evidence,
+    summarize_bin_assignments,
     summarize_bin_taxa,
     summarize_bin_lineage,
     VALID_RANKS,
 )
 from ..utils.validation import validate_dir_exists, validate_file_exists
 from ..utils.logging import log_info, log_warning, log_error, print_header, print_section
+from ..utils.bin_taxonomy import TaxonomyEvidence, validate_thresholds
 
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 
-CONTIG_FIELDS = ['contig', 'bin', 'contig_taxid', 'rank_taxon', 'is_foreign']
+CONTIG_FIELDS = ['contig', 'bin', 'contig_taxid', 'rank_taxon', 'is_foreign',
+                 'sequence_sha256', 'contig_length', 'taxonomy_rank']
 BIN_FIELDS = ['bin', 'n_contigs', 'n_contigs_resolved', 'n_taxa',
               'majority_taxon', 'chimera_flag', 'foreign_frac',
               'n_foreign_contigs', 'foreign_contigs', 'taxa']
@@ -175,6 +177,9 @@ Examples
                       help='MMseqs2 taxonomy TSV (mmseqs createtsv on a taxonomy '
                            'result, or run-mmseqs-contigs output); protein-level, '
                            'GTDB-capable - best for consistency with GTDB-Tk')
+    taxo.add_argument('--taxonomy-table', type=Path,
+                      help='Reuse a sequence-linked classify-contigs TSV for new bin membership; '
+                           'no classifier rerun (not the per-bin .bins.tsv)')
 
     parser.add_argument('--nodes-dmp', type=Path,
                         help='NCBI taxonomy nodes.dmp (ships with the Kraken2/Kaiju DB). '
@@ -203,11 +208,15 @@ Examples
 def run(args):
     """Execute classify-contigs."""
     validate_dir_exists(args.bins_dir, "Bins directory")
+    validate_thresholds(0.5, args.min_foreign_frac)
     if args.names_dmp and not args.names_dmp.exists():
         log_error(f"names.dmp not found: {args.names_dmp}")
         sys.exit(1)
 
-    if args.mmseqs_output is not None:
+    taxonomy_table = getattr(args, 'taxonomy_table', None)
+    if taxonomy_table is not None:
+        validate_file_exists(taxonomy_table, 'Sequence-linked contig taxonomy')
+    elif args.mmseqs_output is not None:
         validate_file_exists(args.mmseqs_output, "MMseqs2 taxonomy TSV")
     elif args.kaiju_output is not None:
         validate_file_exists(args.kaiju_output, "Kaiju output file")
@@ -220,7 +229,10 @@ def run(args):
 
     print_section("Loading classification")
     contig_lineage: Dict[str, str] = {}
-    if args.mmseqs_output is not None:
+    evidence = TaxonomyEvidence(taxonomy_table, rank=args.rank) if taxonomy_table else None
+    if evidence:
+        contig_taxid = {}
+    elif args.mmseqs_output is not None:
         contig_taxid = parse_mmseqs_taxonomy(args.mmseqs_output)
         contig_lineage = parse_mmseqs_lineage(args.mmseqs_output)
     elif args.kaiju_output is not None:
@@ -230,7 +242,7 @@ def run(args):
     log_info(f"Loaded taxon assignments for {len(contig_taxid):,} contigs")
 
     use_lineage = bool(contig_lineage)
-    if not use_lineage:
+    if not use_lineage and not evidence:
         # taxid path needs nodes.dmp to walk to the rank
         if not args.nodes_dmp:
             log_error("--nodes-dmp is required for Kraken2/Kaiju, or for an MMseqs2 "
@@ -240,14 +252,19 @@ def run(args):
         validate_file_exists(args.nodes_dmp, "nodes.dmp")
 
     print_section("Mapping contigs to bins")
-    bin_contigs = assign_contigs_to_bins(args.bins_dir, extensions)
+    bin_contigs, contig_len, contig_digests = collect_bin_evidence(args.bins_dir, extensions, scoped=bool(evidence))
     if not bin_contigs:
         log_error(f"No bin files found in {args.bins_dir} with extensions: {extensions}")
         sys.exit(1)
-    contig_len = collect_contig_lengths(args.bins_dir, extensions)
 
     print_section(f"Resolving per-contig taxonomy at rank '{args.rank}'")
-    if use_lineage:
+    if evidence:
+        summary = {}
+        for name, contigs in bin_contigs.items():
+            lengths = {contig: contig_len[name, contig] for contig in contigs}
+            keys = {contig: evidence.taxon(contig_digests[name, contig], lengths[contig]) for contig in contigs}
+            summary.update(summarize_bin_assignments({name: contigs}, keys, args.rank, lengths))
+    elif use_lineage:
         log_info("Using MMseqs2 lineage column (no nodes.dmp needed)")
         summary = summarize_bin_lineage(bin_contigs, contig_lineage, args.rank,
                                         contig_len=contig_len)
@@ -259,9 +276,13 @@ def run(args):
 
     contig_rows, bin_rows = build_rows(summary, contig_taxid,
                                        min_foreign_frac=args.min_foreign_frac)
+    for row in contig_rows:
+        key = (row['bin'], row['contig']) if evidence else row['contig']
+        row.update(sequence_sha256=contig_digests[key], contig_length=contig_len[key], taxonomy_rank=args.rank)
 
     if not args.dry_run:
         print_section("Writing output")
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         write_tsv(contig_rows, CONTIG_FIELDS, args.output)
         bins_path = Path(str(args.output) + '.bins.tsv')
         write_tsv(bin_rows, BIN_FIELDS, bins_path)

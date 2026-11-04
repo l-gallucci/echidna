@@ -14,9 +14,10 @@ Chains the MAG quality + taxonomy branch end to end, each sub-command in its env
   chimeras   check-chimeras       verdict from GUNC (+ per-contig taxonomy)
   organize2  organize-mags        final rename + quality gate
 
-The chimera verdict uses GUNC alone unless --mmseqs-db is given; with it the
-mmseqs + contigtax steps add the per-contig taxonomy signal, so check-chimeras
-can return a real Chimeric (both signals) verdict.
+The optional overlap step reuses prior contig taxonomy to gate resolved MAGs
+before final QC. The chimera verdict uses GUNC alone unless --mmseqs-db or
+--contig-taxonomy adds the per-contig signal. A supplied sequence-linked table
+is reaggregated, without rerunning the classifier.
 
 The genome names are frozen after organize1 so GUNC, check-chimeras and mimag all
 see the same names (no rename until organize2). Start binning yourself; this
@@ -31,15 +32,29 @@ from typing import List
 
 from ..utils.workflow_run import Step, execute_plan
 from ..utils.logging import print_header
+from .check_shared_contigs import add_taxonomy_options
 
-ALL_KEYS = ['checkm2', 'organize1', 'gtdbtk', 'gunc', 'mmseqs', 'contigtax',
+ALL_KEYS = ['overlap', 'checkm2', 'organize1', 'gtdbtk', 'gunc', 'mmseqs', 'contigtax',
             'mimag', 'chimeras', 'organize2']
 
 
 def build_plan(args) -> List[Step]:
     """Build the ordered Step list from parsed args. Pure (no side effects)."""
     out = args.output_dir
-    ext = args.genome_ext.lstrip('.')
+    resolution_mode = getattr(args, 'resolve_overlaps', None)
+    taxonomy_table = getattr(args, 'contig_taxonomy', None)
+    taxonomy_rank = getattr(args, 'taxonomy_rank', None) or 'order'
+    foreign_threshold = getattr(args, 'min_foreign_frac', 0.05)
+    if taxonomy_table and args.mmseqs_db:
+        raise ValueError('Use --contig-taxonomy to reuse classifications OR --mmseqs-db to generate them')
+    if resolution_mode and (not taxonomy_table or not getattr(args, 'quality_report', None)):
+        raise ValueError('Workflow overlap resolution requires --quality-report and --contig-taxonomy '
+                         '(sequence-linked per-contig TSV covering representatives and candidate MAGs)')
+    if not resolution_mode and any(getattr(args, flag, None) for flag in
+                                   ('quality_report', 'rank_by', 'drep_dir', 'cluster_table', 'candidates_dir')):
+        raise ValueError('Quality ranking and cluster replacement options require --resolve-overlaps')
+    bins = out / '00_overlap' / 'retained' if resolution_mode else args.bins_dir
+    ext = 'fa' if resolution_mode else args.genome_ext.lstrip('.')
     suffix = '.' + ext
 
     ckm2_dir = out / '01_checkm2'
@@ -59,8 +74,24 @@ def build_plan(args) -> List[Step]:
     use_mimag = not args.skip_mimag
 
     steps: List[Step] = []
+    if resolution_mode:
+        overlap = ['echidna', 'check-shared-contigs', '--bins-dir', str(args.bins_dir),
+                   '--recursive', '--extensions', args.genome_ext.lstrip('.'),
+                   '--' + ('exclude-mags' if resolution_mode == 'exclude-mags' else 'remove-shared-contigs'),
+                   '--quality-report', str(args.quality_report), '--contig-taxonomy', str(taxonomy_table),
+                   '--require-retained',
+                   '--taxonomy-rank', taxonomy_rank,
+                   '--min-taxonomy-resolved-frac', str(getattr(args, 'min_taxonomy_resolved_frac', 0.5)),
+                   '--min-foreign-frac', str(foreign_threshold), '-o', str(out / '00_overlap')]
+        for attr in ('rank_by', 'drep_dir', 'cluster_table'):
+            value = getattr(args, attr, None)
+            if value:
+                overlap += ['--' + attr.replace('_', '-'), str(value)]
+        if getattr(args, 'candidates_dir', None):
+            overlap += ['--candidates-dir'] + [str(path) for path in args.candidates_dir]
+        steps.append(Step('overlap', 'check-shared-contigs (overlap + taxonomy gate)', args.echidna_env, overlap))
 
-    ck = ['echidna', 'run-checkm2', '--genome-dir', str(args.bins_dir),
+    ck = ['echidna', 'run-checkm2', '--genome-dir', str(bins),
           '-o', str(ckm2_dir), '--threads', str(args.threads), '--extension', ext]
     if args.checkm2_db:
         ck += ['--database', str(args.checkm2_db)]
@@ -69,7 +100,7 @@ def build_plan(args) -> List[Step]:
     steps.append(Step(
         'organize1', 'organize-mags (tier)', args.echidna_env,
         ['echidna', 'organize-mags', '--checkm2-root', str(ckm2_dir),
-         '--genomes-dir', str(args.bins_dir), '-o', str(filtered_dir),
+         '--genomes-dir', str(bins), '-o', str(filtered_dir),
          '--tiers', args.tiers, '--symlink', '--extensions', ext],
     ))
 
@@ -89,21 +120,23 @@ def build_plan(args) -> List[Step]:
         gu += ['--db-file', str(args.gunc_db)]
     steps.append(Step('gunc', 'run-gunc', args.gunc_env, gu))
 
-    # Per-contig taxonomy = the second chimera signal. Only when an MMseqs2 DB is
-    # given; otherwise the verdict rests on GUNC alone.
-    use_contig_tax = args.mmseqs_db is not None
-    if use_contig_tax:
+    # Per-contig taxonomy can be generated or reused, always reaggregated for the
+    # selected genomes rather than copying the old representative's bin summary.
+    use_contig_tax = args.mmseqs_db is not None or taxonomy_table is not None
+    if args.mmseqs_db is not None:
         steps.append(Step(
             'mmseqs', 'run-mmseqs-contigs', args.mmseqs_env,
             ['echidna', 'run-mmseqs-contigs', '--bins-dir', str(selected),
              '--db', str(args.mmseqs_db), '-o', str(mmseqs_tsv),
              '--threads', str(args.threads), '--extensions', ext],
         ))
+    if use_contig_tax:
+        source = ['--taxonomy-table', str(taxonomy_table)] if taxonomy_table else ['--mmseqs-output', str(mmseqs_tsv)]
         steps.append(Step(
             'contigtax', 'classify-contigs', args.echidna_env,
             ['echidna', 'classify-contigs', '--bins-dir', str(selected),
-             '--mmseqs-output', str(mmseqs_tsv), '-o', str(classify_out),
-             '--extensions', ext],
+             '-o', str(classify_out), '--rank', taxonomy_rank,
+             '--min-foreign-frac', str(foreign_threshold), '--extensions', ext] + source,
         ))
 
     if use_mimag:
@@ -118,11 +151,11 @@ def build_plan(args) -> List[Step]:
             '--gunc-dir', str(gunc_dir), '--checkm2-report', str(quality_report),
             '--gtdbtk-dir', str(tax_dir), '--extensions', ext, '-o', str(chimera_report)]
     if use_contig_tax:
-        chim += ['--contig-taxonomy', str(contig_bins_tsv)]
+        chim += ['--contig-taxonomy', str(contig_bins_tsv), '--min-foreign-frac', str(foreign_threshold)]
     steps.append(Step('chimeras', 'check-chimeras', args.echidna_env, chim))
 
     o2 = ['echidna', 'organize-mags', '--checkm2-root', str(ckm2_dir),
-          '--genomes-dir', str(args.bins_dir), '-o', str(final_dir),
+          '--genomes-dir', str(bins), '-o', str(final_dir),
           '--tiers', args.tiers, '--copy', '--rename',
           '--gtdbtk-dir', str(tax_dir), '--extensions', ext]
     if use_mimag:
@@ -149,9 +182,12 @@ Binning is done upstream; this takes the bins.
     --checkm2-env checkm2 --gtdbtk-env gtdbtk --gunc-env gunc --mimag-env mimag \\
     --split-by-domain
 
-Steps: checkm2 -> organize1 -> gtdbtk -> gunc -> [mmseqs -> contigtax] -> mimag ->
-chimeras -> organize2. The mmseqs/contigtax steps run only with --mmseqs-db and
-add the per-contig taxonomy signal to the chimera verdict (GUNC-only without it).
+Steps: [overlap] -> checkm2 -> organize1 -> gtdbtk -> gunc -> [mmseqs -> contigtax]
+-> mimag -> chimeras -> organize2. --mmseqs-db generates contig classifications;
+--contig-taxonomy reuses a sequence-linked classify-contigs TSV instead.
+--resolve-overlaps requires that table plus --quality-report for prior ranking.
+Optional --drep-dir/--cluster-table with --candidates-dir enables replacements.
+All final QC follows the resolved genomes; the original bin reports are not reused.
 Names are frozen after organize1 so gunc/chimeras/mimag match. Skip the rRNA/tRNA
 gate with --skip-mimag. Resume with --from <step>, drop with --skip a,b, preview
 with --dry-run.
@@ -166,6 +202,17 @@ with --dry-run.
                         help='Quality tiers to carry downstream (default: HQ,MQ)')
     parser.add_argument('--genome-ext', default='fa',
                         help='Bin file extension without dot (default: fa)')
+    parser.add_argument('--resolve-overlaps', choices=['exclude-mags', 'remove-contigs'],
+                        help='Before QC, resolve overlaps and gate all retained MAGs by reused contig taxonomy')
+    parser.add_argument('--quality-report', type=Path,
+                        help='Existing quality table for overlap ranking, including candidate MAGs; '
+                             'CheckM2 is run again on the resolved collection')
+    parser.add_argument('--rank-by', choices=['completeness', 'quality-score'])
+    cluster = parser.add_mutually_exclusive_group()
+    cluster.add_argument('--drep-dir', type=Path)
+    cluster.add_argument('--cluster-table', type=Path)
+    parser.add_argument('--candidates-dir', type=Path, nargs='+')
+    add_taxonomy_options(parser)
 
     parser.add_argument('--echidna-env', default=None,
                         help='Env for the pure-Echidna steps (default: current env)')
@@ -213,7 +260,7 @@ def run(args):
 
     if not args.dry_run:
         subdirs = ['01_checkm2', '06_chimera']
-        if args.mmseqs_db is not None:
+        if args.mmseqs_db is not None or args.contig_taxonomy is not None:
             subdirs.append('04b_contig_taxonomy')
         for sub in subdirs:
             (args.output_dir / sub).mkdir(parents=True, exist_ok=True)

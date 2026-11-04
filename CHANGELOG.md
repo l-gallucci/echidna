@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Preserve one-taxon clean signals when the foreign-fraction threshold is zero.
 - Parse native anvi’o clipping counts and zero-coverage ranges by column name,
   preserving legacy schemas; distinguish no events from invalid/missing files.
 - Match hashed CheckM2 names to original contigs; retain contigs with missing
@@ -25,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve regex/backslash/quote values when writing YAML configuration.
 
 ### Added
+- Reuse sequence-linked `classify-contigs` assignments to gate retained MAGs,
+  trimmed subsets and dereplication-cluster alternatives by taxonomic coverage
+  and foreign-base fraction, with final checks on the actual exported FASTAs.
+- Add `classify-contigs --taxonomy-table` to recompute bin membership summaries
+  without rerunning a classifier. Reject ambiguous raw contig-ID collisions;
+  the MMseqs wrapper deduplicates identical shared IDs before classification.
+- Add optional pre-QC overlap/taxonomy selection to `mag-quality-wf` and the
+  Snakemake DAG; all downstream QC follows resolved genomes, including fresh
+  CheckM2 and GUNC results. Setup flags record equivalent configuration.
+- Optional shared-contig resolution via --exclude-mags / --remove-shared-contigs,
+  explicit quality ranking, preserved originals and removed-record exports.
+  dRep secondary clusters or generic cluster tables can supply whole-genome
+  replacements from original candidates; candidates and final FASTAs are
+  checked globally. Trimmed quality is invalidated and marked for reassessment.
 - Standalone check-shared-contigs: exact whole-contig sharing across MAG FASTAs,
   including renamed sequences and reverse complements; separate conflicting-ID
   reports, pairwise overlap and per-MAG summaries. No external dependencies or

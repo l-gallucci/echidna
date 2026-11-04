@@ -52,7 +52,7 @@ Chimera detection:
 |---|---|
 | `check-read-chimeras` | Chimeras from read-level taxonomy (Kraken2 or Kaiju + BAM) |
 | `check-chimeras` | Per-bin chimera verdict from GUNC + per-contig taxonomy (CheckM2 / GTDB-Tk / GC reported) |
-| `check-shared-contigs` | Report exact contig sequences shared by MAGs and conflicting FASTA IDs |
+| `check-shared-contigs` | Report or resolve shared contigs; optional cluster replacements gated by reused contig taxonomy |
 | `run-gunc` | Gene-level chimerism/contamination (GUNC wrapper) |
 | `run-mmseqs-contigs` | MMseqs2 taxonomy on bin contigs -> per-contig TSV for `classify-contigs` |
 | `classify-contigs` | Flag bins whose contigs span >=2 taxa (per-contig taxonomy foreign fraction) |
@@ -73,7 +73,7 @@ One-command workflows (run a whole branch, each step in its own env):
 | Command | What it does |
 |---|---|
 | `misassembly-wf` | Whole misassembly-cleaning branch (anvi -> process -> readchim -> classify -> filter) |
-| `mag-quality-wf` | Whole MAG quality + taxonomy branch (checkm2 -> organize -> gtdbtk -> gunc -> mimag -> chimeras) |
+| `mag-quality-wf` | MAG QC workflow; optional overlap/taxonomy selection before fresh QC, with reuse of contig classifications |
 
 Setup and environment helpers:
 

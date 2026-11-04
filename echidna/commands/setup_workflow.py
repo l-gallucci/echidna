@@ -110,6 +110,18 @@ Examples:
     parser.add_argument('--tax-level', default=None,
                         choices=['domain', 'phylum', 'class', 'order',
                                  'family', 'genus', 'species'])
+    parser.add_argument('--contig-taxonomy', type=Path,
+                        help='Sequence-linked classify-contigs TSV for reuse (not .bins.tsv)')
+    parser.add_argument('--taxonomy-rank', choices=['domain', 'phylum', 'class', 'order', 'family', 'genus', 'species'])
+    parser.add_argument('--min-taxonomy-resolved-frac', type=float)
+    parser.add_argument('--min-foreign-frac', type=float)
+    parser.add_argument('--resolve-overlaps', choices=['exclude-mags', 'remove-contigs'])
+    parser.add_argument('--quality-report', type=Path, help='Existing quality table used for overlap ranking')
+    parser.add_argument('--rank-by', choices=['completeness', 'quality-score'])
+    clusters = parser.add_mutually_exclusive_group()
+    clusters.add_argument('--drep-dir', type=Path)
+    clusters.add_argument('--cluster-table', type=Path)
+    parser.add_argument('--candidates-dir', type=Path, nargs='+')
 
     # existing conda env names (enables the named-env run mode)
     parser.add_argument('--echidna-env', default=None,
@@ -209,6 +221,27 @@ def run(args):
         text = set_yaml_scalar(text, 'sample_regex', args.sample_regex, quote=True); updates.append('sample_regex')
     if args.tax_level is not None:
         text = set_yaml_scalar(text, 'tax_level', args.tax_level, quote=True); updates.append('tax_level')
+    for attr, key in (('contig_taxonomy', 'contig_taxonomy'), ('taxonomy_rank', 'taxonomy_rank'),
+                      ('resolve_overlaps', 'overlap_resolution'), ('quality_report', 'overlap_quality_report'),
+                      ('rank_by', 'overlap_rank_by'), ('drep_dir', 'overlap_drep_dir'),
+                      ('cluster_table', 'overlap_cluster_table')):
+        value = getattr(args, attr, None)
+        if value is not None:
+            text = set_yaml_scalar(text, key, value, quote=True)
+            updates.append(key)
+    # Switching the cluster source must clear the old mutually exclusive source.
+    if args.drep_dir:
+        text = set_yaml_scalar(text, 'overlap_cluster_table', '', quote=True)
+    elif args.cluster_table:
+        text = set_yaml_scalar(text, 'overlap_drep_dir', '', quote=True)
+    if args.candidates_dir is not None:
+        text = set_yaml_scalar(text, 'overlap_candidates_dirs', json.dumps([str(p) for p in args.candidates_dir]))
+        updates.append('overlap_candidates_dirs')
+    for attr in ('min_taxonomy_resolved_frac', 'min_foreign_frac'):
+        value = getattr(args, attr, None)
+        if value is not None:
+            text = set_yaml_scalar(text, attr, value)
+            updates.append(attr)
 
     # existing env names — recording them switches the workflow to named-env mode
     env_map = {

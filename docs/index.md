@@ -51,7 +51,9 @@ starts from existing bins and covers part of the MAG workflow.
 Check an existing MAG collection for shared complete contig sequences and
 conflicting FASTA identifiers with `echidna check-shared-contigs`.
 See [examples and report definitions](shared-contigs.md). This standalone
-check uses no external tools and produces reports without modifying the MAGs.
+check produces reports by default. Optional quality-based resolution exports
+a new MAG set, with same-cluster replacements when original candidates are
+available; the input FASTAs remain unchanged.
 
 ## Reading the results
 

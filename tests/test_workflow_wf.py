@@ -162,6 +162,30 @@ def test_mag_check_chimeras_frozen_names_use_selected_dir():
     assert 'MOUT/02_filtered/Selected' in gunc.cmd
 
 
+def test_mag_resolution_precedes_all_qc_and_reuses_taxonomy_without_mmseqs():
+    args = _mag_args(resolve_overlaps='remove-contigs', quality_report=Path('all_quality.tsv'),
+                     contig_taxonomy=Path('all_taxonomy.tsv'), drep_dir=Path('drep'),
+                     candidates_dir=[Path('originals')], taxonomy_rank='class')
+    steps = mag_quality_wf.build_plan(args)
+    assert [step.key for step in steps] == ['overlap', 'checkm2', 'organize1', 'gtdbtk', 'gunc',
+                                          'contigtax', 'mimag', 'chimeras', 'organize2']
+    overlap = steps[0].cmd
+    assert '--remove-shared-contigs' in overlap and '--contig-taxonomy' in overlap
+    assert '--drep-dir' in overlap and '--candidates-dir' in overlap
+    for key in ('checkm2', 'organize1', 'organize2'):
+        assert 'MOUT/00_overlap/retained' in next(step.cmd for step in steps if step.key == key)
+    assert '--taxonomy-table' in next(step.cmd for step in steps if step.key == 'contigtax')
+    check = next(step.cmd for step in steps if step.key == 'checkm2')
+    assert check[check.index('--extension') + 1] == 'fa'
+
+
+def test_mag_resolution_requires_taxonomy_and_prior_quality():
+    with pytest.raises(ValueError, match='requires'):
+        mag_quality_wf.build_plan(_mag_args(resolve_overlaps='exclude-mags'))
+    with pytest.raises(ValueError, match='OR'):
+        mag_quality_wf.build_plan(_mag_args(contig_taxonomy=Path('tax.tsv'), mmseqs_db=Path('db')))
+
+
 # ---- run-anvi-misassemblies ----------------------------------------------
 
 def test_anvi_just_do_it_default_on():

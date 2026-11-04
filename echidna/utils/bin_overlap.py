@@ -27,9 +27,10 @@ def sequence_digest(sequence: str) -> str:
     return hashlib.sha256(min(sequence, reverse).encode('ascii')).hexdigest()
 
 
-def read_bin(path: Path) -> Iterator[Tuple[str, str]]:
+def read_bin(path: Path, full_header: bool = False) -> Iterator[Tuple[str, str]]:
     """Strict FASTA reader: reject empty records, bad DNA and duplicate IDs."""
     current = None
+    full_name = None
     parts = []
     seen = set()
     with open_file(path, 'rt') as stream:
@@ -41,8 +42,9 @@ def read_bin(path: Path) -> Iterator[Tuple[str, str]]:
                 if current is not None:
                     if not parts:
                         raise ValueError(f'Empty sequence for {current} in {path}')
-                    yield current, ''.join(parts)
-                header = line[1:].split()
+                    yield (full_name if full_header else current), ''.join(parts)
+                full_name = line[1:].strip()
+                header = full_name.split()
                 if not header:
                     raise ValueError(f'Empty FASTA header at {path}:{line_no}')
                 current = header[0]
@@ -62,7 +64,7 @@ def read_bin(path: Path) -> Iterator[Tuple[str, str]]:
         raise ValueError(f'No FASTA records in {path}')
     if not parts:
         raise ValueError(f'Empty sequence for {current} in {path}')
-    yield current, ''.join(parts)
+    yield (full_name if full_header else current), ''.join(parts)
 
 
 def discover_bins(roots: List[Path], recursive: bool = False,
@@ -100,13 +102,13 @@ def discover_bins(roots: List[Path], recursive: bool = False,
     return dict(sorted(files.items()))
 
 
-def analyze_bins(files: Dict[str, Path]) -> dict:
+def analyze_bins(files: Dict[str, Path], allow_empty=False) -> dict:
     """Index sequence hashes and IDs, then enumerate only candidate bin pairs.
 
     Sequences are discarded after hashing. Metadata scales with contig count;
     pair generation enumerates only bins sharing an exact sequence.
     """
-    if not files:
+    if not files and not allow_empty:
         raise ValueError('No bins supplied')
     records = []
     by_sequence = {}

@@ -243,7 +243,7 @@ def run_chimera_check(
         # Per-contig taxonomy signal: substantial foreign fraction = chimeric.
         contig_foreign_frac = frac_c.get(key)
         tax_chimeric = (None if contig_foreign_frac is None
-                        else contig_foreign_frac >= min_foreign_frac)
+                        else contig_foreign_frac > 0 and contig_foreign_frac >= min_foreign_frac)
 
         verdict, reasons = assess_chimera_verdict(
             gunc_fail=gunc_fail, tax_chimeric=tax_chimeric,
