@@ -133,3 +133,14 @@ python docs/img/gen_diagrams.py docs/img
 
 
 Current operational note: run anvi’o BEFORE `process-large-contigs`, since the latter consumes its clipping output. `classify-clipping` is report-only; quality organization does not apply a chimera exclusion policy. See [the maintained wiki](../wiki/Home.md).
+
+
+## Optional shared-contig check
+
+Before interpreting a combined MAG collection, run
+`echidna check-shared-contigs --bins-dir bins/ -o overlap/`. For quality-tier
+subfolders add `--recursive`; multiple input directories can be supplied after
+`--bins-dir`. The standalone command reports identical complete sequences
+(including renamed contigs and reverse complements) and ID conflicts separately.
+It does not change bin membership or the workflow's chimera verdict.
+See [reports and examples](shared-contigs.md).

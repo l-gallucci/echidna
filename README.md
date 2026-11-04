@@ -52,6 +52,7 @@ Chimera detection:
 |---|---|
 | `check-read-chimeras` | Chimeras from read-level taxonomy (Kraken2 or Kaiju + BAM) |
 | `check-chimeras` | Per-bin chimera verdict from GUNC + per-contig taxonomy (CheckM2 / GTDB-Tk / GC reported) |
+| `check-shared-contigs` | Report exact contig sequences shared by MAGs and conflicting FASTA IDs |
 | `run-gunc` | Gene-level chimerism/contamination (GUNC wrapper) |
 | `run-mmseqs-contigs` | MMseqs2 taxonomy on bin contigs -> per-contig TSV for `classify-contigs` |
 | `classify-contigs` | Flag bins whose contigs span >=2 taxa (per-contig taxonomy foreign fraction) |

@@ -8,6 +8,7 @@ from . import filter_checkm2
 from . import run_gtdbtk
 from . import process_large_contigs
 from . import check_chimeras
+from . import check_shared_contigs
 from . import check_read_chimeras
 from . import classify_contigs
 from . import run_mmseqs_contigs
@@ -26,6 +27,7 @@ __all__ = [
     'run_gtdbtk',
     'process_large_contigs',
     'check_chimeras',
+    'check_shared_contigs',
     'check_read_chimeras',
     'classify_contigs',
     'run_mmseqs_contigs',

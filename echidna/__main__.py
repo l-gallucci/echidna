@@ -17,6 +17,7 @@ from echidna.commands import run_gunc
 from echidna.commands import run_mimag_rna
 from echidna.commands import process_large_contigs
 from echidna.commands import check_chimeras
+from echidna.commands import check_shared_contigs
 from echidna.commands import check_read_chimeras
 from echidna.commands import classify_contigs
 from echidna.commands import run_mmseqs_contigs
@@ -50,6 +51,7 @@ Available commands:
   process-large-contigs   Extract, QC, and filter large contigs intelligently
   run-gunc                Run GUNC gene-level chimerism/contamination detection
   check-chimeras          Detect chimeric MAGs and circular contigs (GC + GUNC)
+  check-shared-contigs    Report contigs shared by MAGs and conflicting FASTA IDs
   check-read-chimeras     Detect chimeric contigs via read-level taxonomy (Kraken2+BAM)
   classify-contigs        Per-contig taxonomy check: flag bins whose contigs span >=2 taxa
   run-mmseqs-contigs      Run MMseqs2 taxonomy on bin contigs (input for classify-contigs)
@@ -84,6 +86,7 @@ For more information, visit: https://github.com/l-gallucci/echidna
     run_mimag_rna.register_parser(subparsers)
     process_large_contigs.register_parser(subparsers)
     check_chimeras.register_parser(subparsers)
+    check_shared_contigs.register_parser(subparsers)
     check_read_chimeras.register_parser(subparsers)
     classify_contigs.register_parser(subparsers)
     run_mmseqs_contigs.register_parser(subparsers)

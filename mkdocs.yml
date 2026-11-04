@@ -23,6 +23,7 @@ nav:
       - Snakemake: snakemake.md
       - HPC: hpc.md
   - Command reference: command-reference.md
+  - Shared contigs between MAGs: shared-contigs.md
   - Interpreting results (IT): guide.md
   - References: references.md
   - Project:

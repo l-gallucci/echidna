@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve regex/backslash/quote values when writing YAML configuration.
 
 ### Added
+- Standalone check-shared-contigs: exact whole-contig sharing across MAG FASTAs,
+  including renamed sequences and reverse complements; separate conflicting-ID
+  reports, pairwise overlap and per-MAG summaries. No external dependencies or
+  automatic changes to bin membership.
 - Distribution metadata renamed to echidnaxomics; the executable and import
   remain echidna, with no echidnaxomics command.
 - Isolated source/wheel builds, bundled workflow templates exportable with

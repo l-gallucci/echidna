@@ -84,6 +84,22 @@ LQ non viene portato avanti con il default `--tiers HQ,MQ`. Specificare i tier d
 
 I controlli chimera sono **report-only**: un MAG segnalato può comunque comparire nelle cartelle di qualità. Scegliere esplicitamente quali escludere e quali rivedere. `check-ssu-taxonomy` e `final-report` restano comandi separati; il DAG Snakemake fornito non comprende MMseqs/classify-contigs e non equivale al wrapper con tutte le opzioni.
 
+## Contig condivisi fra MAG
+
+Il comando indipendente `check-shared-contigs` verifica se due o più MAG contengono
+la stessa sequenza completa di un contig, anche con nomi diversi o in reverse complement:
+
+```bash
+echidna check-shared-contigs --bins-dir bins/ --output-dir overlap/
+```
+
+Per cartelle HQ/MQ/LQ annidate aggiungere `--recursive`. Si possono passare più
+cartelle dopo `--bins-dir`. I report distinguono sequenze condivise e ID uguali
+associati a sequenze differenti; includono coppie di MAG e frazioni condivise.
+Non vengono modificati FASTA, assegnazioni o verdetti chimera. L'identità di una
+sequenza può dipendere da elementi ripetuti: non è, da sola, prova di contaminazione.
+[Dettagli e limiti del confronto](../docs/shared-contigs.md).
+
 ## Database concordanti e confronto delle reads
 
 Per confrontare GUNC, MMseqs2, GTDB-Tk e SSU, preferire riferimenti derivati dalla **stessa tassonomia e dalla stessa release**, quando disponibili. Usare una base tassonomica comune riduce differenze di nomenclatura e copertura; non rende indipendenti i due metodi.

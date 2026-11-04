@@ -45,6 +45,27 @@ Optional:
   --dry-run
 ```
 
+## check-shared-contigs
+
+Report exact full-length contig sequences shared by MAGs, including renamed
+contigs and reverse complements. Same-ID/different-sequence conflicts are
+reported separately. No database or external tool is needed; inputs are not
+modified. This is a standalone check, outside the existing workflow wrappers.
+
+```bash
+echidna check-shared-contigs --bins-dir bins/ -o overlap/
+# Nested quality tiers:
+echidna check-shared-contigs --bins-dir results/Selected/ --recursive -o overlap_selected/
+# Multiple bin sets:
+echidna check-shared-contigs --bins-dir metabat/ semibin/ -o overlap_sets/
+```
+
+Required: `--bins-dir DIR [DIR ...]` and `-o/--output-dir DIR` (new or empty).
+Optional: `--recursive` and `--extensions fa,fna,fasta`; gzip is recognized.
+Reports: `shared_contigs.tsv`, `id_conflicts.tsv`, `bin_pairs.tsv`,
+`bin_summary.tsv` and `summary.json`. See [shared-contig definitions and report
+columns](shared-contigs.md). Partial alignments and ANI are not assessed.
+
 ## check-chimeras
 
 Emits a per-bin 3-state **verdict** from TWO signals only:

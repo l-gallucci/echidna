@@ -46,6 +46,13 @@ GUNC, anvi'o or other tools also need their separate environments and databases;
 see [installation](installation.md). The supplied [Snakemake workflow](snakemake.md)
 starts from existing bins and covers part of the MAG workflow.
 
+## Shared contigs between MAGs
+
+Check an existing MAG collection for shared complete contig sequences and
+conflicting FASTA identifiers with `echidna check-shared-contigs`.
+See [examples and report definitions](shared-contigs.md). This standalone
+check uses no external tools and produces reports without modifying the MAGs.
+
 ## Reading the results
 
 Quality tiers are Echidna's operational thresholds and are distinct from strict
