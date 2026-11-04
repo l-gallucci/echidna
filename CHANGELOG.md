@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-04
+
+First GitHub Release; distribution `echidnaxomics`, command/import `echidna`.
+See [release notes](docs/releases/v1.0.0.md). Earlier version entries are retained
+as project history.
+
 ### Fixed
 - Preserve one-taxon clean signals when the foreign-fraction threshold is zero.
 - Parse native anvi’o clipping counts and zero-coverage ranges by column name,

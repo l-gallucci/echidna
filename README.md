@@ -4,6 +4,9 @@
 
 # Echidna - metagenomic assembly, MAG integrity and chimera screening
 
+**Version 1.0.0** · [Release notes](docs/releases/v1.0.0.md) ·
+[GitHub Releases](https://github.com/l-gallucci/echidna/releases)
+
 A dependency-free Python toolkit for metagenomic assembly quality control: from a
 raw assembly to quality-filtered, taxonomically classified genomes.
 
@@ -12,7 +15,8 @@ orchestrates standard tools (anvi'o, CheckM2, GTDB-Tk, GUNC, barrnap,
 tRNAscan-SE, Kraken2, samtools, BLAST+), each in its own conda env.
 
 The distribution name is **`echidnaxomics`**. The command and Python import remain
-**`echidna`**. Install from the checkout below until a release is published;
+**`echidna`**. Install from source as shown below; GitHub Releases and
+PyPI/Bioconda packages are published separately.
 `pip install echidna` installs an unrelated project.
 
 ## Documentation

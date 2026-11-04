@@ -1,6 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite this repository and the version used."
 type: software
+version: "1.0.0"
+date-released: "2026-11-04"
 title: "Echidna: metagenomic assembly, MAG integrity and chimera screening"
 authors:
   - family-names: Gallucci
@@ -20,5 +22,5 @@ abstract: >-
   MAG quality assessment, taxonomy and chimera screening using external
   bioinformatics tools. The distribution is named echidnaxomics; its command
   and Python package are named echidna.
-# Before release, add version and date-released matching the final tag.
+# Keep version and date-released aligned with the actual GitHub release.
 # After archiving the release, add the actual DOI. Do not invent a DOI.

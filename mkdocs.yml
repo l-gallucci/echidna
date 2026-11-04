@@ -24,9 +24,10 @@ nav:
       - HPC: hpc.md
   - Command reference: command-reference.md
   - Shared contigs between MAGs: shared-contigs.md
-  - Interpreting results (IT): guide.md
+  - Interpreting results: guide.md
   - References: references.md
   - Project:
+      - Release 1.0.0: releases/v1.0.0.md
       - Citation and releases: releasing.md
       - Changelog: changelog.md
       - Website maintenance: wiki.md

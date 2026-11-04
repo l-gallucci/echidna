@@ -38,8 +38,9 @@ python -m pip install -e .
 echidna --help
 ```
 
-Until a release is published, install from this checkout. The registry package
-named `echidna` belongs to an unrelated project.
+Install from source; a GitHub Release does not also publish to PyPI or Bioconda.
+See [1.0.0 release notes](releases/v1.0.0.md). The registry package named
+`echidna` belongs to an unrelated project.
 
 The Python core uses the standard library. Commands that run CheckM2, GTDB-Tk,
 GUNC, anvi'o or other tools also need their separate environments and databases;

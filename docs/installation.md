@@ -169,8 +169,8 @@ validation, and the config/env helpers.
 ## Distribution naming
 
 The installable distribution is **echidnaxomics**, while the executable and
-Python import remain **echidna**. Install from the checkout until a release
-is published. The registry package named `echidna` is unrelated. Installed
+Python import remain **echidna**. Install from source; publication on GitHub
+is separate from PyPI/Bioconda availability. The registry package named `echidna` is unrelated. Installed
 wheels include templates exportable with `echidna setup-workflow
 --export-workflow ./my-workflow`. See [release preparation](releasing.md) for
 CFF author metadata, DOI archiving, package validation and the Bioconda draft.

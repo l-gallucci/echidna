@@ -1,18 +1,25 @@
-# Echidna — wiki
+# Echidna — interpreting results
 
-Guida al toolkit per controllo di assembly metagenomici, qualità dei MAG e screening delle chimere.
-Questa pagina descrive le correzioni successive al checkout 0.0.4 esaminato il 3 novembre 2026; non annuncia una nuova release pubblicata.
+A guide to metagenomic assembly integrity, MAG quality assessment and chimera screening.
+This page describes Echidna 1.0.0, prepared as the first GitHub Release.
+See [GitHub Releases](https://github.com/l-gallucci/echidna/releases) for published
+versions and the [1.0.0 release notes](../docs/releases/v1.0.0.md) for features
+and validation.
 
-## Due percorsi
+## Two branches
 
-| Percorso | Input | Scopo |
+| Branch | Input | Purpose |
 |---|---|---|
-| Assembly | Assembly e reads HiFi rimappate sullo stesso assembly | Cercare misassemblies, separare contig lunghi, preparare il binning |
-| MAG | Un FASTA per bin | Completezza, contaminazione, tassonomia, RNA e screening delle chimere |
+| Assembly | Assembly and HiFi reads mapped back to that same assembly | Find misassemblies, process long contigs and prepare for binning |
+| MAG | One FASTA per bin | Assess completeness, contamination, taxonomy, RNA and chimera signals |
 
-Il core usa solo la libreria standard Python. Anvi’o, CheckM2, GTDB-Tk, GUNC, MMseqs2, barrnap, tRNAscan-SE, samtools e BLAST richiedono installazioni e database separati per i comandi che li utilizzano. Gli ambienti conda del progetto aiutano a separare le loro dipendenze.
+The core uses only the Python standard library. Commands that call anvi'o,
+CheckM2, GTDB-Tk, GUNC, MMseqs2, barrnap, tRNAscan-SE, samtools or BLAST need
+those tools and their databases installed separately. The project's conda
+environments separate their dependencies.
 
-Installare Echidna nell'ambiente che esegue ciascun wrapper. Da un checkout:
+The current automatic workflow setup installs Echidna in each environment that
+runs an Echidna wrapper. From a checkout:
 
 ```bash
 python -m pip install -e .
@@ -20,53 +27,78 @@ echidna --version
 echidna --help
 ```
 
-Il requisito dichiarato del core è Python ≥3.8; la compatibilità dei tool esterni va verificata separatamente. Le correzioni sono testate con l'interprete Miniforge disponibile; non implicano una certificazione di tutti i sistemi operativi o ambienti.
+The declared Python requirement for the core is Python >=3.8. Check external
+tool compatibility separately. Local tests and CI configuration do not certify
+every operating system or external tool environment.
 
-## Identità e formati
+## Identifiers and formats
 
-Usare nomi dei MAG e contig univoci. BAM e FASTA devono avere gli stessi identificativi e lo stesso riferimento. I read ID devono corrispondere al file del classificatore. Prima di rinominare i MAG completare i controlli e conservare gli ID originali dei report.
+Use unique MAG and contig names. BAM and FASTA files must refer to the same
+reference and use matching identifiers. Read IDs must match the classifier
+output. Complete the checks before renaming MAGs, and preserve the original
+identifiers used in the reports.
 
-I parser riconoscono sia gli schemi nativi di anvi’o 9 sia le vecchie colonne Echidna:
+The parsers recognize both native anvi'o 9 schemas and legacy Echidna columns:
 
 ```text
 clipping: contig length pos relative_pos cov clipping clipping_ratio
 zero-cov: contig length range range_size
 ```
 
-Nel formato nativo, `clipping` è il numero di reads clippate; `relative_pos` non è una copertura. `range` è un intervallo zero-based half-open. File con sola intestazione sono risultati validi senza eventi; file mancanti o malformati sono errori. [Formato ufficiale anvi’o](https://anvio.org/help/9/programs/anvi-script-find-misassemblies/).
+In the native format, `clipping` is the number of clipped reads;
+`relative_pos` is not coverage. `range` is a zero-based, half-open interval.
+Header-only files are valid results with no events; missing or malformed files
+are errors. See the [official anvi'o format](https://anvio.org/help/9/programs/anvi-script-find-misassemblies/).
 
-`process-large-contigs` scrive `contig_name_map.tsv` per collegare i nomi CheckM2 con hash ai contig originali. Un contig senza riga CheckM2 viene conservato come non valutato. `remove-hq-contigs --hq-dir` legge i contig dai FASTA dei MAG; i numeri nei nomi dei file non sono identificativi dei contig. In `--hq-list` usare i nomi FASTA esatti.
+`process-large-contigs` writes `contig_name_map.tsv` to link hashed CheckM2
+names to original contigs. A contig without a CheckM2 row is retained as
+unassessed. `remove-hq-contigs --hq-dir` reads contigs from MAG FASTAs; numbers
+in bin filenames are not contig identifiers. Use exact FASTA IDs with `--hq-list`.
 
-## Ramo assembly
+## Assembly branch
 
-Ordine delle dipendenze:
+Dependency order:
 
 ```text
-assembly originale + BAM delle stesse reads
-  → anvi’o: clipping e zero-coverage
+original assembly + BAM of the same reads
+  → anvi'o: clipping and zero coverage
   → process-large-contigs
-  → check-read-chimeras, se è disponibile la classificazione delle reads
-  → classify-clipping: annotazione report-only
+  → check-read-chimeras, when read classifications are available
+  → classify-clipping: report-only annotation
   → filter-misassemblies
-  → nuovo mapping, depth e binning esterno
+  → new mapping, depth calculation and external binning
 ```
 
-Anteprima del wrapper, senza eseguire i tool:
+Preview the wrapper without running external tools:
 
 ```bash
 echidna misassembly-wf --assembly assembly.fa --bam hifi.bam \
   --output-dir assembly_qc --dry-run
 ```
 
-Il wrapper inoltra ora il FASTA al controllo read-level e il produttore scrive una tabella delle finestre anche quando vuota. `classify-clipping` legge il campo `is_taxon_shift` prodotto da quel controllo. Il suo report non decide automaticamente dove tagliare: il filtro usa i clipping originali, eventualmente selezionati con `--min-clip-coverage`.
+The wrapper passes the FASTA to the read-level check, whose producer writes
+a window table even when no windows are reported. `classify-clipping` reads
+the resulting `is_taxon_shift` field. Its report does not automatically decide
+where to split: the filter uses the original clipping sites, optionally
+selected with `--min-clip-coverage`.
 
-La profondità locale è ora una media per base nella finestra, calcolata dai blocchi CIGAR allineati, anziché un conteggio delle partenze. Reads lunghe che iniziano fuori dalla finestra sono incluse se la attraversano. Le statistiche delle coppie sono NA per reads non appaiate come HiFi; i tag SA delle primarie forniscono il segnale di join senza contare due volte le supplementary.
+Local depth is a per-base window average calculated from aligned CIGAR blocks,
+rather than a count of read starts. Long reads starting outside the window
+are included if they span it. Pair statistics are N/A for unpaired reads such
+as HiFi. Primary-read SA tags provide the join signal without counting
+supplementary alignments twice.
 
-Dopo lo splitting, per esempio `contig_A → contig_A_split1 + contig_A_split2`, il vecchio BAM usa ancora `contig_A`. Rimappare le reads sul FASTA modificato prima di produrre la depth per il nuovo binning. Il BAM originale continua a servire ai controlli sul riferimento originale.
+After splitting, for example `contig_A → contig_A_split1 + contig_A_split2`,
+the old BAM still refers to `contig_A`. Remap reads to the modified FASTA before
+calculating depth for new binning. The original BAM remains appropriate for
+checks against the original reference.
 
-`HQ_extracted/` e `assembly_for_filtering.fa` sono output complementari: i contig estratti non si trovano più nell'assembly residuo. Conservare e valutare entrambi. Un assembly senza contig lunghi produce comunque l'assembly per il passo successivo.
+`HQ_extracted/` and `assembly_for_filtering.fa` are complementary outputs:
+extracted contigs are absent from the residual assembly. Preserve and assess
+both. An assembly without long contigs still produces the assembly needed by
+the next step.
 
-## Ramo MAG
+## MAG branch
 
 ```bash
 echidna mag-quality-wf --bins-dir bins --genome-ext fa \
@@ -77,75 +109,91 @@ echidna mag-quality-wf --bins-dir bins --genome-ext fa \
   --split-by-domain --dry-run
 ```
 
-Togliere `--dry-run` solo dopo aver predisposto ambienti, input e database. Il piano è:
+Remove `--dry-run` after preparing the environments, inputs and databases.
+The default step order is:
 `checkm2 → organize1 → gtdbtk → gunc → [mmseqs → contigtax] → mimag → chimeras → organize2`.
 
-LQ non viene portato avanti con il default `--tiers HQ,MQ`. Specificare i tier desiderati. Le estensioni vengono inoltrate anche ai passi MIMAG e chimera. I nomi rimangono quelli originali fino all'ultima organizzazione.
+LQ is not carried forward with the default `--tiers HQ,MQ`; select the desired
+tiers explicitly. Extensions are passed to the MIMAG and chimera steps too.
+Names remain unchanged until final organization.
 
-I controlli chimera sono **report-only**: un MAG segnalato può comunque comparire nelle cartelle di qualità. Scegliere esplicitamente quali escludere e quali rivedere. `check-ssu-taxonomy` e `final-report` restano comandi separati. Il DAG Snakemake può riusare una tabella tassonomica per contig tramite `classify-contigs`, ma non esegue la classificazione MMseqs iniziale.
+Chimera checks are **report-only**: flagged MAGs can still appear in quality
+folders. Choose explicitly which to exclude and which to review.
+`check-ssu-taxonomy` and `final-report` remain separate commands. The Snakemake
+DAG can reuse a per-contig taxonomy table through `classify-contigs`, but does
+not perform the initial MMseqs classification.
 
-## Contig condivisi fra MAG
+## Shared contigs between MAGs
 
-Il comando indipendente `check-shared-contigs` verifica se due o più MAG contengono
-la stessa sequenza completa di un contig, anche con nomi diversi o in reverse complement:
+The standalone `check-shared-contigs` command checks whether two or more MAGs
+contain the same complete contig sequence, including renamed contigs and
+reverse complements:
 
 ```bash
 echidna check-shared-contigs --bins-dir bins/ --output-dir overlap/
 ```
 
-Per cartelle HQ/MQ/LQ annidate aggiungere `--recursive`. Si possono passare più
-cartelle dopo `--bins-dir`. I report distinguono sequenze condivise e ID uguali
-associati a sequenze differenti; includono coppie di MAG e frazioni condivise.
-Nel comportamento predefinito non vengono modificati FASTA, assegnazioni o verdetti chimera. L'identità di una
-sequenza può dipendere da elementi ripetuti: non è, da sola, prova di contaminazione.
-Il comportamento predefinito è report-only. Con `--quality-report` si possono usare
-`--exclude-mags` oppure `--remove-shared-contigs`: i risultati risolti vanno in
-`retained/`, con esclusi e contig rimossi salvati separatamente. La priorità è
-completezza decrescente, poi contaminazione crescente. `--rank-by quality-score`
-usa invece completezza meno cinque volte la contaminazione.
+Add `--recursive` for nested HQ/MQ/LQ folders. Multiple directories can follow
+`--bins-dir`. Reports distinguish shared sequences from identical IDs assigned
+to different sequences, and include MAG pairs and shared fractions. By default,
+FASTA files, membership and chimera verdicts are unchanged. Identical sequences
+can represent repeated elements; sharing alone is not proof of contamination.
 
-Con `--drep-dir` (oppure `--cluster-table`) e `--candidates-dir` vengono cercati
-sostituti dello stesso cluster. Ogni candidato è verificato contro tutto il set
-mantenuto e il set finale viene ricontrollato. I MAG privati di contig hanno
-qualità finale non valutata e richiedono CheckM2; i sostituti richiedono i propri
-controlli a valle. Gli originali rimangono invariati.
-[Dettagli e limiti del confronto e della risoluzione](../docs/shared-contigs.md).
+With `--quality-report`, choose `--exclude-mags` or `--remove-shared-contigs`
+to export resolved copies into `retained/`, with excluded MAGs and removed
+contigs saved separately. Default priority is decreasing completeness, then
+increasing contamination. `--rank-by quality-score` instead uses completeness
+minus five times contamination.
 
-### Recupero dai cluster con verifica tassonomica
+With `--drep-dir` (or `--cluster-table`) and `--candidates-dir`, the command
+looks for alternatives from the same cluster. Each candidate is checked against
+the entire retained set, and the final collection is checked again. Trimmed
+MAGs have unassessed final quality and need new CheckM2 results; replacements
+need their own downstream checks. Original FASTAs remain unchanged.
+See [comparison and resolution rules](../docs/shared-contigs.md).
 
-`check-shared-contigs --contig-taxonomy <classify-contigs.tsv>` verifica anche
-la coerenza interna dei MAG conservati e dei candidati recuperati. La tabella
-deve essere quella **per contig**, con impronta della sequenza, lunghezza e rango,
-non il riepilogo `.bins.tsv`. I candidati vengono accettati solo se non
-condividono contig con gli altri MAG conservati e superano la verifica tassonomica.
-Se un candidato fallisce, viene provato il successivo. Non vengono costruiti
-MAG ibridi tramite unioni di contig di genomi diversi.
+### Cluster recovery with taxonomy checks
 
-Per impostazione iniziale almeno il 50% delle basi del MAG deve avere un taxon
-risolto al rango scelto; la frazione minoritaria deve essere inferiore al 5%
-delle basi risolte. Le soglie sono configurabili. Evidenza insufficiente non
-equivale a coerenza. Il confronto per sequenza consente il riuso anche dopo
-rinomina o reverse complement; assegnazioni contraddittorie diventano irrisolte.
+`check-shared-contigs --contig-taxonomy <classify-contigs.tsv>` also checks
+the internal taxonomic coherence of retained MAGs and recovered candidates.
+Supply the **per-contig** table containing sequence fingerprints, lengths
+and rank, not the `.bins.tsv` summary. Candidates must pass both the sharing
+and taxonomy checks. If one fails, the next candidate is tried. The command
+does not construct hybrid MAGs by joining contigs from different genomes.
 
-Il workflow `mag-quality-wf --resolve-overlaps exclude-mags` (oppure
-`remove-contigs`) esegue questa selezione prima di CheckM2, GTDB-Tk, GUNC e RNA.
-Richiede `--quality-report` per l'ordinamento e `--contig-taxonomy` per la verifica;
-con `--drep-dir`/`--cluster-table` e `--candidates-dir` abilita le sostituzioni.
-La tassonomia dei bin finali viene riaggregata dalle assegnazioni per contig,
-senza rilanciare il classificatore. Il DAG Snakemake offre lo stesso passaggio
-opzionale con le chiavi `overlap_*` in config.yaml.
+By default, at least 50% of all MAG bases must resolve at the selected rank;
+minority taxa must account for less than 5% of resolved bases. Both thresholds
+are configurable. Insufficient evidence does not mean coherence. Sequence
+matching allows reuse after renaming or reverse complementation; conflicting
+assignments become unresolved.
 
-Gli output precedenti privi di impronta si rigenerano rilanciando soltanto
-`classify-contigs` sul vecchio output grezzo del classificatore e sui FASTA
-originali corrispondenti. [Procedura e workflow](../docs/workflows.md#overlap-resolution-with-existing-contig-taxonomy).
+`mag-quality-wf --resolve-overlaps exclude-mags` (or `remove-contigs`) performs
+this selection before CheckM2, GTDB-Tk, GUNC and RNA screening. It requires
+`--quality-report` for ranking and `--contig-taxonomy` for verification.
+`--drep-dir`/`--cluster-table` with `--candidates-dir` enables replacements.
+Final bin taxonomy is reaggregated from per-contig assignments without
+rerunning the classifier. The Snakemake DAG offers the same optional selection
+through the `overlap_*` configuration keys.
 
-## Database concordanti e confronto delle reads
+To add fingerprints to older outputs, rerun only `classify-contigs` using the
+existing raw classifier output and its corresponding original FASTAs.
+See the [procedure and workflow](../docs/workflows.md#overlap-resolution-with-existing-contig-taxonomy).
 
-Per confrontare GUNC, MMseqs2, GTDB-Tk e SSU, preferire riferimenti derivati dalla **stessa tassonomia e dalla stessa release**, quando disponibili. Usare una base tassonomica comune riduce differenze di nomenclatura e copertura; non rende indipendenti i due metodi.
+## Consistent databases and read comparisons
 
-Non si può passare lo stesso file `.dmnd` a MMseqs2: i tool richiedono formati e preparazioni differenti. Usare una release GUNC appropriata e il corrispondente database MMseqs2; registrare release, provenienza e checksum. Eseguire entrambi i passi produce i due segnali: non serve eseguire due volte lo stesso classificatore per ottenere concordanza. Database alternativi possono essere usati in run separate per un'analisi di sensibilità.
+When comparing GUNC, MMseqs2, GTDB-Tk and SSU signals, prefer references derived
+from the **same taxonomy and release**, where available. A common taxonomy
+reduces differences in nomenclature and coverage; it does not make the two
+methods independent.
 
-Per le reads si può aggiungere un confronto a rango comune:
+The same `.dmnd` file cannot be passed to MMseqs2: each tool requires its own
+formats and preparation. Use an appropriate GUNC release and a corresponding
+MMseqs database, recording release, provenance and checksums. Running both
+steps supplies the two signals; running the same classifier twice does not
+provide corroboration. Alternative databases can be used in separate runs
+for sensitivity analysis.
+
+For reads, comparison at a common rank is available:
 
 ```bash
 echidna check-read-chimeras --bam hifi.bam --assembly assembly.fa \
@@ -154,44 +202,71 @@ echidna check-read-chimeras --bam hifi.bam --assembly assembly.fa \
   --output-dir reads_qc
 ```
 
-`nodes.dmp` deve provenire dal database del classificatore. Senza `--taxonomy-rank` rimane il confronto dei taxid originali. Il roll-up riduce falsi conflitti fra un taxid di specie e uno del suo genere/ordine. Sono richieste almeno 10 reads classificate per il rischio read-level; reads mancanti dal classificatore non diventano un taxon artificiale. Le finestre valutano reads classificate.
+`nodes.dmp` must come from the classifier's database. Without `--taxonomy-rank`,
+the original taxids are compared. Rank roll-up reduces false conflicts between
+a species taxid and one assigned to its genus/order. At least ten classified
+reads are required for read-level risk assessment. Reads missing from the
+classifier do not become an artificial taxon. Windows assess classified reads.
 
-Ulteriore evidenza utile: supporto SA coerente, identità e qualità del mapping, supporto dei due lati della giunzione e verifica in un viewer. Una tassonomia mista è il livello di screening disponibile, non una dimostrazione definitiva di chimera.
+Useful additional evidence includes consistent SA support, mapping identity
+and quality, support on both sides of a junction, and inspection in a viewer.
+Mixed taxonomy is a screening signal, not definitive proof of a chimera.
 
-## Qualità, circolarità e suffissi GTDB
+## Quality, circularity and GTDB suffixes
 
-Le soglie interne rimangono intenzionalmente:
+The internal thresholds intentionally remain:
 
-| Tier | Completezza | Contaminazione |
+| Tier | Completeness | Contamination |
 |---|---|---|
-| HQ | ≥90% | ≤5% |
-| MQ | ≥70% | ≤10% |
-| LQ | ≥50% | ≤10% |
+| HQ | >=90% | <=5% |
+| MQ | >=70% | <=10% |
+| LQ | >=50% | <=10% |
 
-La selezione “HQ” di `process-large-contigs` usa invece 50/10 per default. Queste etichette operative restano distinte dallo standard MIMAG. Se si richiede `--mimag-rna-dir`, un HQ senza evidenza RNA completa, compreso un risultato mancante, viene declassato a MQ; il valore RNA rimane vuoto quando non valutato.
+The default HQ extraction threshold in `process-large-contigs` is instead
+50%/10%. These operational labels are distinct from the MIMAG standard.
+With `--mimag-rna-dir`, an HQ MAG without complete RNA evidence, including a
+missing result, is demoted to MQ. The RNA value remains blank when unassessed.
 
-Il report distingue:
+The report distinguishes:
 
-- `circular_annotated`: annotazione esplicita nel FASTA, per MAG a singolo contig; NA se assente. Una descrizione `circular=true` viene conservata nell'estrazione dei contig lunghi. `circular=false` prevale sull'euristica di lunghezza nel filtro.
-- `near_complete_candidate`: completezza ≥99% e contaminazione ≤5%, indipendentemente dalla circolarità. È un'evidenziazione di qualità, non la dichiarazione di genoma completo.
-- `n_contigs`: numero di contig nel FASTA. Queste informazioni strutturali richiedono `final-report --genomes-dir`.
+- `circular_annotated`: explicit FASTA annotation for a single-contig MAG;
+  N/A when absent. A `circular=true` description is preserved during long-contig
+  extraction. `circular=false` overrides the filter's length heuristic.
+- `near_complete_candidate`: completeness >=99% and contamination <=5%,
+  independently of circularity. This highlights quality; it does not declare
+  a complete genome.
+- `n_contigs`: FASTA contig count. These structural fields require
+  `final-report --genomes-dir`.
 
-Nel filtro assembly l'euristica di lunghezza resta un fallback per l'opzione `--split-hq-circular` quando manca l'annotazione. Non viene presentata come prova di circolarità; le definizioni degli assembler possono differire.
+In assembly filtering, the length heuristic remains a fallback for
+`--split-hq-circular` when an annotation is absent. It is not proof of
+circularity; assembler definitions can differ.
 
-I confronti SSU **conservano `_A`, `_B` e gli altri suffissi GTDB**. Nessun nome FASTA viene cambiato da questa correzione. Un confronto prima positivo solo grazie alla rimozione del suffisso può ora diventare negativo: va valutato con la release del riferimento. Per SILVA vs GTDB non assumere una corrispondenza automatica fra nomi diversi; preferire riferimenti coerenti o una mappa tassonomica curata.
+SSU comparisons **preserve `_A`, `_B` and other GTDB suffixes**. This correction
+does not rename FASTA records. A comparison that previously agreed only because
+a suffix was removed can now disagree; interpret it against the reference
+release. Do not assume automatic SILVA/GTDB name equivalence: prefer consistent
+references or a curated taxonomy map.
 
-## Verdetti e report finale
+## Verdicts and final report
 
-| Evidenza | Verdetto MAG |
+| Evidence | MAG verdict |
 |---|---|
-| GUNC fail e frazione estranea ≥0.05 | Chimeric |
-| Un solo segnale anomalo | Check |
-| Nessuna anomalia nei segnali misurati | Clean |
-| Nessun segnale misurato | Unknown |
+| GUNC fail and foreign fraction >=0.05 | Chimeric |
+| Only one signal flags an anomaly | Check |
+| No anomaly in the measured signals | Clean |
+| No measured signal | Unknown |
 
-La frazione estranea è pesata sulla lunghezza dei contig **risolti**. Zero contig risolti significa segnale mancante, non frazione misurata uguale a zero. Per compatibilità sono accettate anche vecchie tabelle senza `n_contigs_resolved`, ma queste non permettono il controllo della disponibilità: preferire output aggiornati di `classify-contigs`.
+The foreign fraction is weighted by the length of **resolved** contigs. Zero
+resolved contigs means missing evidence, not a measured fraction of zero.
+Legacy tables without `n_contigs_resolved` remain accepted for compatibility,
+but cannot support that availability check. Prefer current `classify-contigs`
+outputs.
 
-GC, contaminazione CheckM2 e warning GTDB sono informativi. Un solo segnale misurato e negativo può dare Clean: leggerlo come “nessuna anomalia in quel segnale”. La regola di consenso è invariata.
+GC, CheckM2 contamination and GTDB warnings are informative columns. One
+measured, non-flagging signal can yield Clean; read this as "no anomaly in that
+signal." The consensus rule is unchanged. The table above uses the default
+foreign-fraction threshold; `--min-foreign-frac` can change it.
 
 ```bash
 echidna final-report --genomes-dir bins \
@@ -202,30 +277,47 @@ echidna final-report --genomes-dir bins \
   --output mag_qc/final_report.tsv
 ```
 
-`tier` mantiene il significato storico: soglie CheckM2 predefinite. `organized_tier` riporta la selezione effettiva, comprese soglie personalizzate e gate RNA, quando si passa `--organized-quality`. I genomi del report vanno identificati con i nomi originali, non con i nomi rinominati dell'output finale.
+`tier` retains its historical meaning: default CheckM2 thresholds.
+`organized_tier` reports the effective selection, including custom thresholds
+and RNA gating, when `--organized-quality` is supplied. Identify report genomes
+by their original names rather than renamed final-output filenames. If overlap
+resolution was used, point `--genomes-dir` to `mag_qc/00_overlap/retained/`,
+so structural fields describe the resolved collection.
 
-Le colonne aggiunte non rinominano le precedenti; i consumatori TSV devono leggere le intestazioni. `concerns` vuoto non certifica la qualità di un MAG. BLAST mantiene il criterio del workflow Trigodet/anvi’o: un'esecuzione riuscita senza hit può dare `unsupported`, un errore di esecuzione ora interrompe il comando.
+Added columns do not rename existing ones; TSV consumers should read headers.
+An empty `concerns` field does not certify MAG quality. BLAST retains the
+Trigodet/anvi'o workflow criterion: a successful search without hits can yield
+`unsupported`, while execution errors stop the command.
 
-## Ripresa e verifiche
+## Resuming and validation
 
-Usare directory di output nuove per run con input o soglie cambiati. Per evitare tier obsolete, `organize-mags` rifiuta una selezione già popolata; non elimina file esistenti. `--from` presuppone che gli output dei passi precedenti siano validi. Per rifare l'organizzazione finale usare un output nuovo o spostare prima la precedente selezione.
+Use new output directories for runs with changed inputs or thresholds.
+To prevent stale tiers, `organize-mags` refuses a populated selection directory;
+it does not delete existing files. `--from` assumes valid outputs from earlier
+steps. To repeat final organization, use a new output or first move the previous
+selection aside.
 
-La distribuzione si chiama **`echidnaxomics`**; comando e import restano **`echidna`**.
-Fino alla pubblicazione installare dal checkout, non dal pacchetto omonimo `echidna`.
-I wheel includono ora i template Snakemake: `echidna setup-workflow --export-workflow ./my-workflow`
-li copia in una directory nuova e modificabile. `--repo /percorso/del/checkout` resta disponibile.
-Con un workflow esportato passare a `fetch-databases` il percorso esplicito `--config`.
-Gli ambienti forniti sono esempi da verificare con la propria release dei tool.
+The distribution is named **`echidnaxomics`**; the command and import remain
+**`echidna`**. Install from source until this distribution is available through
+your chosen registry; the registry package named `echidna` is unrelated.
+Wheels include Snakemake templates: `echidna setup-workflow --export-workflow ./my-workflow`
+copies them into a new writable directory. `--repo /path/to/checkout` remains
+available. With an exported workflow, pass an explicit `--config` path to
+`fetch-databases`. Environment templates must be checked against the tool
+releases you use.
 
-Il DAG traccia i singoli FASTA e le directory di output dei tool; nelle riesecuzioni Snakemake
-ricrea gli output dichiarati, compresa `organized/Selected`, per evitare tier obsolete.
-Conservare in queste directory solo gli output del workflow. Le prove del DAG usano report
-a monte simulati e i comandi Echidna reali a valle: non sono una validazione con database reali.
-Metadati autore, DOI e ricetta Bioconda sono descritti nella
-[guida alla release](https://github.com/l-gallucci/echidna/blob/main/docs/releasing.md).
+The DAG tracks individual FASTAs and tool output directories. On reruns,
+Snakemake recreates declared outputs, including `organized/Selected`, to avoid
+stale tiers. Keep only workflow outputs in those directories. DAG tests use
+simulated upstream reports and real downstream Echidna commands; they are not
+validation against real databases. Author metadata, DOI archiving and the
+Bioconda recipe are described in the [release guide](../docs/releasing.md).
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider
 ```
 
-I test includono casi puliti di controllo, collegamenti fra formati reali e uno smoke test opzionale con un BAM sintetico e samtools reale. Non sostituiscono una run completa delle pipeline con i database installati. Il registro delle correzioni e delle scelte mantenute è nella [relazione del repository](https://github.com/l-gallucci/echidna/blob/main/docs/audit-2026-11-03/FIXES.md).
+Tests include clean controls, native-format handoffs and an optional smoke test
+using a synthetic BAM with real samtools. They do not replace a full pipeline
+run with installed databases. The historical correction record and retained
+methodological choices are in the [repository report](https://github.com/l-gallucci/echidna/blob/main/docs/audit-2026-11-03/FIXES.md).

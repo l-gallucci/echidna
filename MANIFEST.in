@@ -11,3 +11,4 @@ prune workflow/.snakemake
 
 recursive-include packaging *.py *.in
 include docs/releasing.md
+recursive-include docs/releases *.md
