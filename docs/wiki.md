@@ -2,8 +2,7 @@
 
 The documentation website is prepared for **GitHub Pages** at
 [https://l-gallucci.github.io/echidna/](https://l-gallucci.github.io/echidna/).
-It becomes available after you enable Pages and run the publication workflow.
-No website has been published as part of this preparation.
+The workflow builds and publishes it automatically after every push to `main`.
 
 ## Activate GitHub Pages
 
@@ -11,14 +10,16 @@ After reviewing, committing and pushing these files yourself:
 
 1. Open the repository's **Settings → Pages**.
 2. Under **Build and deployment → Source**, select **GitHub Actions**.
-3. Open **Actions → Documentation website → Run workflow**.
-4. Choose the `main` branch, enable **Publish the built documentation to GitHub Pages**,
-   and click **Run workflow**.
-5. When the `deploy` job succeeds, visit the URL reported by that job.
+3. Push a commit to `main`. Alternatively, open **Actions → Documentation website
+   → Run workflow**, select `main`, and run it to redeploy the current version.
+4. When the `deploy` job succeeds, visit the URL reported by that job.
 
-Pushes and pull requests build and validate the documentation. Publication is
-manual: when you want to update the live site, run the same workflow with the
-publish option enabled. A run without that option only validates the site.
+Every push to `main` builds, validates and deploys the site, including pushes
+that only change code. Pull requests build and validate without deploying.
+Manual runs deploy only when `main` is selected. A failed build prevents
+deployment; the previously deployed site remains available. No publish checkbox
+is required. If Pages is already configured with GitHub Actions, no further
+activation is needed.
 Publishing documentation does not create a software release or DOI.
 
 ## Edit the content
@@ -27,7 +28,7 @@ Publishing documentation does not create a software release or DOI.
 |---|---|
 | Website home | `docs/index.md` |
 | Installation, workflows, commands, references | Corresponding Markdown files in `docs/` |
-| Interpretation guide (Italian) | `wiki/Home.md` |
+| Interpretation guide (English) | `wiki/Home.md` |
 | Snakemake guide | `workflow/README.md` |
 | Changelog | `CHANGELOG.md` |
 | Navigation and theme | `mkdocs.yml` |

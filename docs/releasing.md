@@ -173,5 +173,6 @@ References: [recipe guidelines](https://bioconda.github.io/contributor/guideline
 
 The documentation website is built with MkDocs and prepared for GitHub Pages.
 It imports `wiki/Home.md` as a maintained source. Follow [website activation](wiki.md)
-to select GitHub Actions as the Pages source and publish manually. No website
-has been published here. Documentation publication does not issue a software DOI.
+to select GitHub Actions as the Pages source once. Every push to `main` then
+builds and publishes the site automatically; pull requests only validate it.
+Documentation publication does not create a GitHub software release or issue a DOI.
